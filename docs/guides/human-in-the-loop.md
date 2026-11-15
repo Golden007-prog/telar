@@ -273,6 +273,46 @@ val config = GraphConfig(
 - The module only needs the runtime of SQLDelight, not its Gradle plugin. An app that uses
   SQLDelight for its own tables keeps its setup as it is.
 
+## In PostgreSQL, for servers
+
+::: info Not on Maven Central yet
+`telar-checkpoint-postgres` comes with the next release.
+:::
+
+A server with several instances needs a database they share, so that a run that paused on one
+instance can be resumed on another. `PostgresCheckpointer`, from `telar-checkpoint-postgres` (JVM),
+keeps the checkpoints in PostgreSQL, through the `DataSource` of the app:
+
+```kotlin
+// build.gradle.kts
+implementation("dev.deeptelar:telar-checkpoint-postgres:<version>")
+implementation("org.postgresql:postgresql:42.7.14") // the JDBC driver
+implementation("com.zaxxer:HikariCP:7.1.0")         // or any other pool
+
+// The server.
+val dataSource = HikariDataSource(HikariConfig().apply { jdbcUrl = "jdbc:postgresql://db:5432/app" })
+val config = GraphConfig(
+    threadId = "refund-42",
+    checkpointer = PostgresCheckpointer(dataSource, KotlinxStateSerializer<RefundState>()),
+    interruptBefore = setOf("pay"),
+)
+```
+
+- The table is the same as that of SQLite: one row for each step of a thread, so `history`, `fork`
+  and `maxHistory` work, and a save is one transaction.
+- **Two instances that save the same thread at the same time take turns.** A save locks its thread
+  until it commits, so the rows of a thread are always those of one save after another. The
+  checkpointer does not decide which of two runs of the same thread saves last, so run a thread in
+  one place at a time, for example by sending the requests of a thread to one instance, or with a
+  lock of your own around the run.
+- The checkpointer creates its table on first use. With migrations of your own, such as Flyway or
+  Liquibase, pass `createTable = false` and create the table from the SQL in the KDoc of
+  `PostgresCheckpointer`. `table` takes a name with a schema too, such as `agents.telar_checkpoints`.
+- Every call takes a connection of the pool for one transaction, on `Dispatchers.IO`, because JDBC
+  blocks. A failure of the database is thrown as the `SQLException` of the driver.
+- It needs PostgreSQL 12 or later. `PostgresStore` keeps the [memories](memory.md) of the agents in
+  the same database.
+
 With a [`GraphSession`](apps-with-a-screen.md), this brings a screen back where the run stopped
 after the operating system ended the app. The sample
 [`AppRestart`](https://github.com/deeptelar/telar/blob/main/samples/src/main/kotlin/dev/deeptelar/telar/samples/AppRestart.kt)
