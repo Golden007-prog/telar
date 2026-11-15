@@ -146,13 +146,45 @@ telar.run                    telar.thread_id=ticket-42  telar.outcome=completed
 - **A failure** is recorded on the node and on the run, with the status `ERROR`. A cancelled node,
   for example the other node of a step in which one node failed, is not an error.
 
+Both observers are also an [`AgentObserver`](#calls-to-models-and-tools), so the calls to models
+and tools inside a node are spans of the node. They have the names and attributes of the
+[semantic conventions for generative AI](https://opentelemetry.io/docs/specs/semconv/gen-ai/), so a
+backend that knows them shows them as calls to a model. A tool agent looks like this:
+
+```
+telar.run                        telar.thread_id=ticket-42
+├─ telar.node model              telar.step=1
+│  └─ chat                       gen_ai.usage.input_tokens=812  gen_ai.usage.output_tokens=64
+├─ telar.node tools              telar.step=2
+│  └─ execute_tool order_status  gen_ai.tool.name=order_status  gen_ai.tool.call.id=toolu_01...
+└─ telar.node model              telar.step=3
+   └─ chat                       gen_ai.usage.input_tokens=901  gen_ai.usage.output_tokens=38
+```
+
+- **A call to a model** is a span named `chat`, of kind `CLIENT`, with `gen_ai.operation.name`
+  and the tokens its provider reported: `gen_ai.usage.input_tokens`, which counts the tokens read
+  from a cache too, and `gen_ai.usage.output_tokens`. `gen_ai.usage.cache_read.input_tokens` and
+  `gen_ai.usage.cache_write.input_tokens` are there when they are not 0. A `ChatModel` does not say
+  which model it calls, so the span has no `gen_ai.request.model`. A call that failed has the status
+  `ERROR` and an `error.type`, the name of the exception's class.
+- **A tool call** is a span named `execute_tool <name>`, with `gen_ai.tool.name` and
+  `gen_ai.tool.call.id`. A tool that returned an error to the model has the status `ERROR` and the
+  `error.type` `tool_error`, although the run goes on, because the model is told about the error. A
+  call that ended without a result, because the run was cancelled or paused, has no status: the span
+  of the node says what happened.
+
+The span of a call is not the current span while the call runs, because the functions of an
+observer are not `suspend`. So the span of a model's HTTP request, from an instrumented client or
+the `Traceparent` plugin, is inside the span of the node, next to `chat`.
+
 `exception.type` is the name of the class with its package, except on Kotlin/JS, which only knows
 the name of the class.
 
 ## What is never recorded
 
 The state of a run is not recorded, and neither is what a node reports with `reportProgress`, such
-as the text a model writes. Both can hold personal data. An observer is not even given the state.
+as the text a model writes, nor the messages of a call to a model, the input of a tool or its result.
+They can hold personal data. An observer is not even given the state.
 To see what a step wrote, read the [history](human-in-the-loop.md) of the thread or
 [stream](streaming.md) the run.
 
@@ -245,6 +277,9 @@ edge's condition runs after its node has ended. To see that call, decide in a no
 `isYes` or `score`, store the decision in the state, and route on it with a plain `conditionalEdge`.
 As for the rest of an observer, the conversation is never given: not the messages, the input of a
 tool or its result.
+
+The observers of `telar-otel` are agent observers: they record each call as a span inside its node
+(see [The spans](#the-spans)).
 
 A library can tell observers of its own kind about what happens in a node the same way, with
 `forEachNodeObserver` from `telar-core`.
