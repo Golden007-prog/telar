@@ -53,6 +53,11 @@ made under that name keep it. The repository is `deeptelar/telar` and the demo i
   `AsyncDriver`, which answers like the browser's driver), the native driver in `appleTest`, and
   the real `WebWorkerDriver` with SQLDelight's sql.js worker in `webTest`, in headless Chrome
   (`karma.config.d/sqljs.js` serves `sql-wasm.wasm`; the Node.js test tasks are off)
+- **`telar-checkpoint-postgres`** (JVM): `PostgresCheckpointer` and `PostgresStore` on the app's JDBC
+  `DataSource`, for servers with several instances. A save locks its thread with
+  `pg_advisory_xact_lock`, so saves of one thread take turns; tables are created on first use unless
+  `createTable = false`. The tests start a real PostgreSQL with embedded-postgres (zonky), no Docker,
+  and each test gets a fresh database (`Database.fresh()`)
 - **`telar-checkpoint-browser`** (JS and Wasm, browser only, code in `webMain`):
   `LocalStorageCheckpointer` and `LocalStorageStore` on `localStorage`. Its tests run in headless Chrome
 - **`telar-agent`** (KMP): `ChatModel` (the provider-neutral model interface), `ChatMessage`,

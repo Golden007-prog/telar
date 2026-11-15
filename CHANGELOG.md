@@ -12,6 +12,11 @@ breaking changes.
 - `telar-bom`, a bill of materials: `implementation(platform("dev.deeptelar:telar-bom:<version>"))`
   names the version once, and every module of Telar that the app adds gets it. It names the
   artifact of each platform too, for Maven builds. ([#79](https://github.com/deeptelar/telar/issues/79))
+- `telar-checkpoint-postgres`, for servers with several instances: `PostgresCheckpointer` saves the
+  checkpoints of each thread in PostgreSQL and `PostgresStore` keeps the items of a `Store` there,
+  through the `DataSource` of the app. A run that paused on one instance resumes on another, and
+  saves of one thread take turns. Tables are created on first use, or by the app's migrations with
+  `createTable = false`. ([#137](https://github.com/deeptelar/telar/issues/137))
 - `OtlpObserver` and `OpenTelemetryObserver` of `telar-otel` record a span for each call to a model
   and each tool call inside the span of its node, with the names of the OpenTelemetry semantic
   conventions for generative AI: `chat`, with the tokens of the call in `gen_ai.usage.*`, and

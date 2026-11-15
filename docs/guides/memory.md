@@ -171,6 +171,7 @@ Each module with a checkpointer has a store too, for the same platforms:
 | `FileStore(directory)` | `telar-checkpoint-file` | A folder for each part of a namespace, and in it one JSON file with the items of that namespace. Every platform with a file system; JS and Wasm on Node.js only |
 | `SqlDelightStore(driver)` | `telar-checkpoint-sqldelight` | A table `telar_store` with a row for each item, in any SQLite database of SQLDelight: Android, iOS, desktop, servers, and the browser, where the database of SQLDelight's worker is in memory |
 | `LocalStorageStore()` | `telar-checkpoint-browser` | An entry of the page's `localStorage` for each item, so the items survive a reload |
+| `PostgresStore(dataSource)` | `telar-checkpoint-postgres` | A table `telar_store` with a row for each item, in PostgreSQL, so that every instance of a server remembers the same. JVM. It comes with the next release |
 
 `SqlDelightStore` creates its table when it first needs it, so one database, and one driver, can
 hold the checkpoints and the memories:

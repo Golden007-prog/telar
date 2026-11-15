@@ -10,6 +10,7 @@ dependencies {
     implementation("dev.deeptelar:telar-checkpoint-file:0.1.0-alpha17")    // save runs as JSON files
     implementation("dev.deeptelar:telar-checkpoint-browser:0.1.0-alpha17") // save runs in a browser's localStorage (JS and Wasm)
     implementation("dev.deeptelar:telar-checkpoint-sqldelight:0.1.0-alpha17") // save runs in SQLite through SQLDelight, on every platform
+    // telar-checkpoint-postgres: save runs in PostgreSQL, for servers (JVM). It comes with the next release.
     implementation("dev.deeptelar:telar-agent:0.1.0-alpha17")              // chat models, tools and the tool-calling agent
     implementation("dev.deeptelar:telar-anthropic:0.1.0-alpha17")          // call Claude, on every platform
     implementation("dev.deeptelar:telar-openai:0.1.0-alpha17")             // call OpenAI, Ollama and compatible servers, on every platform
@@ -53,6 +54,7 @@ it in `<dependencyManagement>` with `<scope>import</scope>` and leave the versio
 | `telar-checkpoint-file` | same as core (Node.js only for JS/Wasm) | `FileCheckpointer`, one JSON file per thread, and `FileStore` |
 | `telar-checkpoint-browser` | JS and Wasm in a browser | `LocalStorageCheckpointer`, runs that survive a page reload, and `LocalStorageStore` |
 | `telar-checkpoint-sqldelight` | same as core | `SqlDelightCheckpointer`: runs in a SQLite database through SQLDelight, on Android, iOS, desktop, servers and the browser (in memory there), and `SqlDelightStore` |
+| `telar-checkpoint-postgres` | JVM | `PostgresCheckpointer` and `PostgresStore`: runs and memories in [PostgreSQL](guides/human-in-the-loop.md#in-postgresql-for-servers), shared by the instances of a server, through the app's JDBC `DataSource`. From the next release |
 | `telar-agent` | same as core | `ChatModel`, `Tool`, and the tool-calling agent: `toolAgent` / `toolLoop`; `memoryTools`, `EmbeddingModel` and `SemanticStore` |
 | `telar-anthropic` | same as core | `AnthropicChatModel`, Claude through Ktor |
 | `telar-openai` | same as core | `OpenAiChatModel`: OpenAI, Ollama and other servers with the Chat Completions API, through Ktor; `OpenAiEmbeddingModel` for their embeddings |

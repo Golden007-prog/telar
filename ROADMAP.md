@@ -30,13 +30,14 @@ modules for tests and for OpenTelemetry. The API can still change in any release
 Sections 1 and 2 are done. They were the last planned changes to an API that exists: a node can run
 once for each item of a list, a message can carry images and PDFs ([#103]), a run can pause and
 continue at any node of a subgraph ([#34]), and a step has one order for its results ([#101]).
-Section 3 is what is worked on now. Long conversations are done ([#105]): a model reuses what it
-already read, and reads a shorter conversation while the state keeps all of it. Teams of agents are
-done too ([#170]): a supervisor that gives out tasks, and agents that hand a conversation to each
-other. So is a memory that an agent keeps across conversations ([#171]): a store with the
-tools of an agent, kept in a file, in SQLite or in the browser, and searched by meaning. Tracing is done
-too ([#38]): a span for each node, edge with a condition, call to a model and tool call. Next comes
-a database server for checkpoints, such as PostgreSQL ([#137]).
+Section 3 is done as well. Long conversations ([#105]): a model reuses what it already read, and
+reads a shorter conversation while the state keeps all of it. Teams of agents ([#170]): a
+supervisor that gives out tasks, and agents that hand a conversation to each other. A memory that
+an agent keeps across conversations ([#171]): a store with the tools of an agent, kept in a file,
+in SQLite, in PostgreSQL or in the browser, and searched by meaning. Tracing ([#38]): a span for
+each node, edge with a condition, call to a model and tool call. Checkpoints in PostgreSQL, for
+servers with several instances ([#137]), and one version for every module with `telar-bom`
+([#79]). Next comes the beta of section 4.
 
 ## The way to 1.0
 
@@ -97,7 +98,7 @@ of this table, and someone who needs one sooner can build it at any time.
 | 12 | Teams of agents | Ready-made graphs for more than one agent, built on subgraphs: `supervisor`, which gives each task to the `TeamAgent` that fits it, and `handoffTeam`, whose agents hand the conversation to each other. | Done | [#170] |
 | 13 | Memory across threads | A store that an agent reads and writes in every conversation of a user, next to the checkpoint of one thread, so that it remembers what it learned last time. Done: `Store`, `MemoryStore`, `GraphConfig.store`, `store()`, `within`, `memoryTools`, stores that keep what they remember: `FileStore`, `SqlDelightStore` and `LocalStorageStore`, and `search`, by meaning with `SemanticStore` and an `EmbeddingModel` such as `OpenAiEmbeddingModel`. | Done | [#171] |
 | 14 | Tracing | Hooks in the engine that report every node, edge, tool call and token count, and a module that sends them to OpenTelemetry. Done: `GraphObserver` for runs, nodes, edges with a condition, steps and checkpoints, `AgentObserver` for each call to a model and each tool call, with its token count, also those of a `decisionEdge` ([#157]), and `telar-otel`, which sends runs to OpenTelemetry on every platform, the browser included, with a span for each call to a model and each tool call ([#138]). | Done | [#38] |
-| 15 | Database checkpointer | Saves runs in a SQL database. Released: SQLite through SQLDelight, `telar-checkpoint-sqldelight`, for Android, iOS, desktop and the browser. Still to come: a database server such as PostgreSQL ([#137]). | In progress | [#84] |
+| 15 | Database checkpointer | Saves runs in a SQL database: SQLite through SQLDelight, `telar-checkpoint-sqldelight`, for Android, iOS, desktop and the browser, and PostgreSQL for servers with several instances, `telar-checkpoint-postgres` ([#137]), both with a `Store` as well. | Done | [#84] |
 | 16 | One version for all modules | `telar-bom`: a bill of materials. An app names the version of Telar once, and every module it adds uses that version. | Done | [#79] |
 
 ## 4. Beta: make it stable
