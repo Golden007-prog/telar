@@ -8,8 +8,12 @@ public abstract interface class dev/deeptelar/telar/agent/AgentObserver : dev/de
 }
 
 public final class dev/deeptelar/telar/agent/AgentObserver$DefaultImpls {
+	public static fun edgeContext (Ldev/deeptelar/telar/agent/AgentObserver;Ldev/deeptelar/telar/ObservedEdge;)Lkotlin/coroutines/CoroutineContext;
 	public static fun nodeContext (Ldev/deeptelar/telar/agent/AgentObserver;Ldev/deeptelar/telar/ObservedNode;)Lkotlin/coroutines/CoroutineContext;
 	public static fun onCheckpointSaved (Ldev/deeptelar/telar/agent/AgentObserver;Ldev/deeptelar/telar/ObservedRun;ILjava/util/List;)V
+	public static fun onEdgeCompleted (Ldev/deeptelar/telar/agent/AgentObserver;Ldev/deeptelar/telar/ObservedEdge;Ljava/util/List;)V
+	public static fun onEdgeFailed (Ldev/deeptelar/telar/agent/AgentObserver;Ldev/deeptelar/telar/ObservedEdge;Ljava/lang/Throwable;)V
+	public static fun onEdgeStarted (Ldev/deeptelar/telar/agent/AgentObserver;Ldev/deeptelar/telar/ObservedEdge;)V
 	public static fun onModelCallCompleted (Ldev/deeptelar/telar/agent/AgentObserver;Ldev/deeptelar/telar/agent/ObservedModelCall;Ldev/deeptelar/telar/agent/TokenUsage;)V
 	public static fun onModelCallFailed (Ldev/deeptelar/telar/agent/AgentObserver;Ldev/deeptelar/telar/agent/ObservedModelCall;Ljava/lang/Throwable;)V
 	public static fun onModelCallStarted (Ldev/deeptelar/telar/agent/AgentObserver;Ldev/deeptelar/telar/agent/ObservedModelCall;)V
@@ -502,15 +506,15 @@ public final class dev/deeptelar/telar/agent/MemoryToolsKt {
 }
 
 public final class dev/deeptelar/telar/agent/ObservedModelCall {
+	public final fun getCaller ()Ldev/deeptelar/telar/ObservedCaller;
 	public final fun getModel ()Ldev/deeptelar/telar/agent/ChatModel;
-	public final fun getNode ()Ldev/deeptelar/telar/ObservedNode;
 	public fun toString ()Ljava/lang/String;
 }
 
 public final class dev/deeptelar/telar/agent/ObservedToolCall {
+	public final fun getCaller ()Ldev/deeptelar/telar/ObservedCaller;
 	public final fun getId ()Ljava/lang/String;
 	public final fun getName ()Ljava/lang/String;
-	public final fun getNode ()Ldev/deeptelar/telar/ObservedNode;
 	public fun toString ()Ljava/lang/String;
 }
 

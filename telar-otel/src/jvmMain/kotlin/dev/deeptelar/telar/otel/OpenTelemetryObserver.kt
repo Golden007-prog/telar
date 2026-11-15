@@ -1,7 +1,10 @@
 package dev.deeptelar.telar.otel
 
+import dev.deeptelar.telar.EdgeConditionException
 import dev.deeptelar.telar.GraphConfig
 import dev.deeptelar.telar.NodeExecutionException
+import dev.deeptelar.telar.ObservedCaller
+import dev.deeptelar.telar.ObservedEdge
 import dev.deeptelar.telar.ObservedNode
 import dev.deeptelar.telar.ObservedRun
 import dev.deeptelar.telar.agent.AgentObserver
@@ -43,15 +46,19 @@ import kotlin.time.Duration
  *   event `telar.checkpoint` for each saved checkpoint.
  * - **A node** has the attributes `telar.node`, `telar.step` and `telar.outcome`, and an event
  *   `telar.retry` for each try that failed and was followed by another.
+ * - **An edge with a condition** is a span `telar.edge <from>` inside the run, with
+ *   `telar.edge.from`, `telar.step` (the step whose results it routes, 0 for an edge from `START`),
+ *   `telar.outcome`, and `telar.next_nodes`, what the condition chose. A plain edge has no span.
  * - **A failure** is recorded on the span of the node and of the run, with the status `ERROR`. A
  *   cancelled node or run is not an error.
  *
- * The span of a node is current while the node runs, so the spans of what it calls, such as an HTTP
- * client with OpenTelemetry instrumentation, are inside it.
+ * The span of a node is current while the node runs, and that of an edge while its condition runs,
+ * so the spans of what they call, such as an HTTP client with OpenTelemetry instrumentation, are
+ * inside them.
  *
  * **Calls to models and tools.** It is also an `AgentObserver`, so the calls that a node of
  * `toolLoop` or `toolAgent`, `ask`, `chatWithProgress` or a `ChatDecisionModel` makes are spans inside
- * the span of the node, named as the
+ * the span of the node, or of the edge for the condition of a `decisionEdge`, named as the
  * [semantic conventions for generative AI](https://opentelemetry.io/docs/specs/semconv/gen-ai/) name
  * them:
  *
@@ -85,6 +92,9 @@ public class OpenTelemetryObserver(
 
     /** The context of each running node, which holds its span. */
     private val nodes = ConcurrentHashMap<ObservedNode, Context>()
+
+    /** The context of each edge whose condition runs, which holds its span. */
+    private val edges = ConcurrentHashMap<ObservedEdge, Context>()
 
     /** The span of each call to a model or a tool that has not ended. */
     private val calls = ConcurrentHashMap<Any, Span>()
@@ -162,8 +172,38 @@ public class OpenTelemetryObserver(
 
     override fun nodeContext(node: ObservedNode): CoroutineContext = nodes[node]?.asContextElement() ?: EmptyCoroutineContext
 
+    override fun onEdgeStarted(edge: ObservedEdge) {
+        val parent = runs[edge.run] ?: return
+        val span =
+            tracer
+                .spanBuilder("telar.edge ${edge.from}")
+                .setParent(parent)
+                .setAttribute(EDGE_FROM, edge.from)
+                .setAttribute(STEP, edge.step.toLong())
+                .startSpan()
+        edges[edge] = parent.with(span)
+    }
+
+    override fun onEdgeCompleted(edge: ObservedEdge, targets: List<String>) {
+        endEdge(edge) { it.setAttribute(OUTCOME, "completed").setAttribute(NEXT_NODES, targets) }
+    }
+
+    override fun onEdgeFailed(edge: ObservedEdge, cause: Throwable) {
+        // An EdgeConditionException only says which edge failed, and the span says that already.
+        endEdge(edge) { it.recordFailure(if (cause is EdgeConditionException) cause.cause ?: cause else cause) }
+    }
+
+    override fun edgeContext(edge: ObservedEdge): CoroutineContext = edges[edge]?.asContextElement() ?: EmptyCoroutineContext
+
+    /** The context of the node or edge that makes a call, which holds its span. */
+    private fun contextOf(caller: ObservedCaller): Context? =
+        when (caller) {
+            is ObservedNode -> nodes[caller]
+            is ObservedEdge -> edges[caller]
+        }
+
     override fun onModelCallStarted(call: ObservedModelCall) {
-        val parent = nodes[call.node] ?: return
+        val parent = contextOf(call.caller) ?: return
         calls[call] =
             tracer
                 .spanBuilder(CHAT)
@@ -195,7 +235,7 @@ public class OpenTelemetryObserver(
     }
 
     override fun onToolCallStarted(call: ObservedToolCall) {
-        val parent = nodes[call.node] ?: return
+        val parent = contextOf(call.caller) ?: return
         val builder =
             tracer
                 .spanBuilder("$EXECUTE_TOOL ${call.name}")
@@ -233,6 +273,12 @@ public class OpenTelemetryObserver(
         span.end()
     }
 
+    private inline fun endEdge(edge: ObservedEdge, finish: (Span) -> Unit) {
+        val span = edges.remove(edge)?.let(Span::fromContext) ?: return
+        finish(span)
+        span.end()
+    }
+
     private inline fun endNode(node: ObservedNode, finish: (Span) -> Unit) {
         val span = nodes.remove(node)?.let(Span::fromContext) ?: return
         finish(span)
@@ -254,6 +300,7 @@ private const val INSTRUMENTATION_SCOPE = "dev.deeptelar.telar"
 
 private val THREAD_ID: AttributeKey<String> = AttributeKey.stringKey("telar.thread_id")
 private val NODE: AttributeKey<String> = AttributeKey.stringKey("telar.node")
+private val EDGE_FROM: AttributeKey<String> = AttributeKey.stringKey("telar.edge.from")
 private val NODES: AttributeKey<List<String>> = AttributeKey.stringArrayKey("telar.nodes")
 private val NEXT_NODES: AttributeKey<List<String>> = AttributeKey.stringArrayKey("telar.next_nodes")
 private val STEP: AttributeKey<Long> = AttributeKey.longKey("telar.step")

@@ -2,8 +2,12 @@ public final class dev/deeptelar/telar/otel/OpenTelemetryObserver : dev/deeptela
 	public fun <init> ()V
 	public fun <init> (Lio/opentelemetry/api/OpenTelemetry;)V
 	public synthetic fun <init> (Lio/opentelemetry/api/OpenTelemetry;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun edgeContext (Ldev/deeptelar/telar/ObservedEdge;)Lkotlin/coroutines/CoroutineContext;
 	public fun nodeContext (Ldev/deeptelar/telar/ObservedNode;)Lkotlin/coroutines/CoroutineContext;
 	public fun onCheckpointSaved (Ldev/deeptelar/telar/ObservedRun;ILjava/util/List;)V
+	public fun onEdgeCompleted (Ldev/deeptelar/telar/ObservedEdge;Ljava/util/List;)V
+	public fun onEdgeFailed (Ldev/deeptelar/telar/ObservedEdge;Ljava/lang/Throwable;)V
+	public fun onEdgeStarted (Ldev/deeptelar/telar/ObservedEdge;)V
 	public fun onModelCallCompleted (Ldev/deeptelar/telar/agent/ObservedModelCall;Ldev/deeptelar/telar/agent/TokenUsage;)V
 	public fun onModelCallFailed (Ldev/deeptelar/telar/agent/ObservedModelCall;Ljava/lang/Throwable;)V
 	public fun onModelCallStarted (Ldev/deeptelar/telar/agent/ObservedModelCall;)V
@@ -31,9 +35,13 @@ public final class dev/deeptelar/telar/otel/OtlpExportException : dev/deeptelar/
 public final class dev/deeptelar/telar/otel/OtlpObserver : dev/deeptelar/telar/agent/AgentObserver {
 	public synthetic fun <init> (Lio/ktor/client/HttpClient;Lkotlinx/coroutines/CoroutineScope;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;JLkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (Lio/ktor/client/HttpClient;Lkotlinx/coroutines/CoroutineScope;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;JLkotlin/jvm/functions/Function1;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun edgeContext (Ldev/deeptelar/telar/ObservedEdge;)Lkotlin/coroutines/CoroutineContext;
 	public final fun flush (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun nodeContext (Ldev/deeptelar/telar/ObservedNode;)Lkotlin/coroutines/CoroutineContext;
 	public fun onCheckpointSaved (Ldev/deeptelar/telar/ObservedRun;ILjava/util/List;)V
+	public fun onEdgeCompleted (Ldev/deeptelar/telar/ObservedEdge;Ljava/util/List;)V
+	public fun onEdgeFailed (Ldev/deeptelar/telar/ObservedEdge;Ljava/lang/Throwable;)V
+	public fun onEdgeStarted (Ldev/deeptelar/telar/ObservedEdge;)V
 	public fun onModelCallCompleted (Ldev/deeptelar/telar/agent/ObservedModelCall;Ldev/deeptelar/telar/agent/TokenUsage;)V
 	public fun onModelCallFailed (Ldev/deeptelar/telar/agent/ObservedModelCall;Ljava/lang/Throwable;)V
 	public fun onModelCallStarted (Ldev/deeptelar/telar/agent/ObservedModelCall;)V

@@ -581,21 +581,21 @@ final class dev.deeptelar.telar.agent/EmbeddingModelException : dev.deeptelar.te
 }
 
 final class dev.deeptelar.telar.agent/ObservedModelCall { // dev.deeptelar.telar.agent/ObservedModelCall|null[0]
+    final val caller // dev.deeptelar.telar.agent/ObservedModelCall.caller|{}caller[0]
+        final fun <get-caller>(): dev.deeptelar.telar/ObservedCaller // dev.deeptelar.telar.agent/ObservedModelCall.caller.<get-caller>|<get-caller>(){}[0]
     final val model // dev.deeptelar.telar.agent/ObservedModelCall.model|{}model[0]
         final fun <get-model>(): dev.deeptelar.telar.agent/ChatModel // dev.deeptelar.telar.agent/ObservedModelCall.model.<get-model>|<get-model>(){}[0]
-    final val node // dev.deeptelar.telar.agent/ObservedModelCall.node|{}node[0]
-        final fun <get-node>(): dev.deeptelar.telar/ObservedNode // dev.deeptelar.telar.agent/ObservedModelCall.node.<get-node>|<get-node>(){}[0]
 
     final fun toString(): kotlin/String // dev.deeptelar.telar.agent/ObservedModelCall.toString|toString(){}[0]
 }
 
 final class dev.deeptelar.telar.agent/ObservedToolCall { // dev.deeptelar.telar.agent/ObservedToolCall|null[0]
+    final val caller // dev.deeptelar.telar.agent/ObservedToolCall.caller|{}caller[0]
+        final fun <get-caller>(): dev.deeptelar.telar/ObservedCaller // dev.deeptelar.telar.agent/ObservedToolCall.caller.<get-caller>|<get-caller>(){}[0]
     final val id // dev.deeptelar.telar.agent/ObservedToolCall.id|{}id[0]
         final fun <get-id>(): kotlin/String // dev.deeptelar.telar.agent/ObservedToolCall.id.<get-id>|<get-id>(){}[0]
     final val name // dev.deeptelar.telar.agent/ObservedToolCall.name|{}name[0]
         final fun <get-name>(): kotlin/String // dev.deeptelar.telar.agent/ObservedToolCall.name.<get-name>|<get-name>(){}[0]
-    final val node // dev.deeptelar.telar.agent/ObservedToolCall.node|{}node[0]
-        final fun <get-node>(): dev.deeptelar.telar/ObservedNode // dev.deeptelar.telar.agent/ObservedToolCall.node.<get-node>|<get-node>(){}[0]
 
     final fun toString(): kotlin/String // dev.deeptelar.telar.agent/ObservedToolCall.toString|toString(){}[0]
 }
