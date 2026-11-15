@@ -1,6 +1,7 @@
 package dev.deeptelar.telar.otel
 
 import dev.deeptelar.telar.END
+import dev.deeptelar.telar.EdgeConditionException
 import dev.deeptelar.telar.GraphConfig
 import dev.deeptelar.telar.MemoryCheckpointer
 import dev.deeptelar.telar.NodeExecutionException
@@ -8,9 +9,11 @@ import dev.deeptelar.telar.Retry
 import dev.deeptelar.telar.START
 import dev.deeptelar.telar.StateGraph
 import dev.deeptelar.telar.agent.AgentState
+import dev.deeptelar.telar.agent.ChatDecisionModel
 import dev.deeptelar.telar.agent.ChatModelException
 import dev.deeptelar.telar.agent.TokenUsage
 import dev.deeptelar.telar.agent.Tool
+import dev.deeptelar.telar.agent.decisionEdge
 import dev.deeptelar.telar.agent.toolAgent
 import dev.deeptelar.telar.interrupt
 import dev.deeptelar.telar.test.ScriptedChatModel
@@ -85,6 +88,49 @@ class OpenTelemetryObserverTest {
             assertEquals("order_status", tool.string("gen_ai.tool.name"))
             assertEquals("call-1", tool.string("gen_ai.tool.call.id"))
             assertEquals(StatusCode.UNSET, tool.status.statusCode)
+        }
+
+    @Test
+    fun `an edge with a condition is a span of the run with the call of its model inside`() =
+        runTest {
+            val chat = ScriptedChatModel { says("""{"decision": {"refund": 0.1, "technical": 0.9}}""", TokenUsage(30, 4)) }
+            var current: String? = null
+            val graph =
+                StateGraph<Ticket> {
+                    val refund = node("refund") { it }
+                    val technical = node("technical") { it }
+                    decisionEdge(START, ChatDecisionModel(chat), "Which team?", routes = mapOf(refund to null, technical to null)) {
+                        current = Span.current().spanContext.spanId
+                        "It crashes"
+                    }
+                }.compile()
+
+            graph.invoke(Ticket(), config())
+
+            val edge = span("telar.edge __START__")
+            assertEquals(span("telar.run").spanId, edge.parentSpanId)
+            assertEquals(0L, edge.long("telar.step"))
+            assertEquals(listOf("technical"), edge.strings("telar.next_nodes"))
+            assertEquals(edge.spanId, current)
+            assertEquals(edge.spanId, span("chat").parentSpanId)
+        }
+
+    @Test
+    fun `a condition that fails is an error of its edge`() =
+        runTest {
+            val graph =
+                StateGraph<Ticket> {
+                    val read = node("read") { it }
+                    START then read
+                    conditionalEdge(read, setOf(END)) { error("No route for this ticket.") }
+                }.compile()
+
+            assertFailsWith<EdgeConditionException> { graph.invoke(Ticket(), config()) }
+
+            val edge = span("telar.edge read")
+            assertEquals("failed", edge.string("telar.outcome"))
+            assertEquals(StatusCode.ERROR, edge.status.statusCode)
+            assertEquals("No route for this ticket.", edge.status.description)
         }
 
     @Test
