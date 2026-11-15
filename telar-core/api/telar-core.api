@@ -297,8 +297,12 @@ public final class dev/deeptelar/telar/GraphEventKt {
 }
 
 public abstract interface class dev/deeptelar/telar/GraphObserver {
+	public fun edgeContext (Ldev/deeptelar/telar/ObservedEdge;)Lkotlin/coroutines/CoroutineContext;
 	public fun nodeContext (Ldev/deeptelar/telar/ObservedNode;)Lkotlin/coroutines/CoroutineContext;
 	public fun onCheckpointSaved (Ldev/deeptelar/telar/ObservedRun;ILjava/util/List;)V
+	public fun onEdgeCompleted (Ldev/deeptelar/telar/ObservedEdge;Ljava/util/List;)V
+	public fun onEdgeFailed (Ldev/deeptelar/telar/ObservedEdge;Ljava/lang/Throwable;)V
+	public fun onEdgeStarted (Ldev/deeptelar/telar/ObservedEdge;)V
 	public fun onNodeCompleted (Ldev/deeptelar/telar/ObservedNode;)V
 	public fun onNodeFailed (Ldev/deeptelar/telar/ObservedNode;Ljava/lang/Throwable;)V
 	public fun onNodeInterrupted (Ldev/deeptelar/telar/ObservedNode;)V
@@ -313,8 +317,12 @@ public abstract interface class dev/deeptelar/telar/GraphObserver {
 }
 
 public final class dev/deeptelar/telar/GraphObserver$DefaultImpls {
+	public static fun edgeContext (Ldev/deeptelar/telar/GraphObserver;Ldev/deeptelar/telar/ObservedEdge;)Lkotlin/coroutines/CoroutineContext;
 	public static fun nodeContext (Ldev/deeptelar/telar/GraphObserver;Ldev/deeptelar/telar/ObservedNode;)Lkotlin/coroutines/CoroutineContext;
 	public static fun onCheckpointSaved (Ldev/deeptelar/telar/GraphObserver;Ldev/deeptelar/telar/ObservedRun;ILjava/util/List;)V
+	public static fun onEdgeCompleted (Ldev/deeptelar/telar/GraphObserver;Ldev/deeptelar/telar/ObservedEdge;Ljava/util/List;)V
+	public static fun onEdgeFailed (Ldev/deeptelar/telar/GraphObserver;Ldev/deeptelar/telar/ObservedEdge;Ljava/lang/Throwable;)V
+	public static fun onEdgeStarted (Ldev/deeptelar/telar/GraphObserver;Ldev/deeptelar/telar/ObservedEdge;)V
 	public static fun onNodeCompleted (Ldev/deeptelar/telar/GraphObserver;Ldev/deeptelar/telar/ObservedNode;)V
 	public static fun onNodeFailed (Ldev/deeptelar/telar/GraphObserver;Ldev/deeptelar/telar/ObservedNode;Ljava/lang/Throwable;)V
 	public static fun onNodeInterrupted (Ldev/deeptelar/telar/GraphObserver;Ldev/deeptelar/telar/ObservedNode;)V
@@ -330,6 +338,7 @@ public final class dev/deeptelar/telar/GraphObserver$DefaultImpls {
 
 public final class dev/deeptelar/telar/GraphObserverKt {
 	public static final fun forEachNodeObserver (Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun forEachObserver (Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public abstract interface class dev/deeptelar/telar/GraphResult {
@@ -547,10 +556,22 @@ public final class dev/deeptelar/telar/NodeTimeoutException : dev/deeptelar/tela
 	public final fun getTimeout-UwyO8pc ()J
 }
 
-public final class dev/deeptelar/telar/ObservedNode {
+public abstract interface class dev/deeptelar/telar/ObservedCaller {
+	public abstract fun getRun ()Ldev/deeptelar/telar/ObservedRun;
+	public abstract fun getStep ()I
+}
+
+public final class dev/deeptelar/telar/ObservedEdge : dev/deeptelar/telar/ObservedCaller {
+	public final fun getFrom ()Ljava/lang/String;
+	public fun getRun ()Ldev/deeptelar/telar/ObservedRun;
+	public fun getStep ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/deeptelar/telar/ObservedNode : dev/deeptelar/telar/ObservedCaller {
 	public final fun getName ()Ljava/lang/String;
-	public final fun getRun ()Ldev/deeptelar/telar/ObservedRun;
-	public final fun getStep ()I
+	public fun getRun ()Ldev/deeptelar/telar/ObservedRun;
+	public fun getStep ()I
 	public fun toString ()Ljava/lang/String;
 }
 

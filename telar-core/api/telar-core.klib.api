@@ -23,8 +23,12 @@ abstract interface <#A: kotlin/Any?> dev.deeptelar.telar/StateSerializer { // de
 }
 
 abstract interface dev.deeptelar.telar/GraphObserver { // dev.deeptelar.telar/GraphObserver|null[0]
+    open fun edgeContext(dev.deeptelar.telar/ObservedEdge): kotlin.coroutines/CoroutineContext // dev.deeptelar.telar/GraphObserver.edgeContext|edgeContext(dev.deeptelar.telar.ObservedEdge){}[0]
     open fun nodeContext(dev.deeptelar.telar/ObservedNode): kotlin.coroutines/CoroutineContext // dev.deeptelar.telar/GraphObserver.nodeContext|nodeContext(dev.deeptelar.telar.ObservedNode){}[0]
     open fun onCheckpointSaved(dev.deeptelar.telar/ObservedRun, kotlin/Int, kotlin.collections/List<kotlin/String>) // dev.deeptelar.telar/GraphObserver.onCheckpointSaved|onCheckpointSaved(dev.deeptelar.telar.ObservedRun;kotlin.Int;kotlin.collections.List<kotlin.String>){}[0]
+    open fun onEdgeCompleted(dev.deeptelar.telar/ObservedEdge, kotlin.collections/List<kotlin/String>) // dev.deeptelar.telar/GraphObserver.onEdgeCompleted|onEdgeCompleted(dev.deeptelar.telar.ObservedEdge;kotlin.collections.List<kotlin.String>){}[0]
+    open fun onEdgeFailed(dev.deeptelar.telar/ObservedEdge, kotlin/Throwable) // dev.deeptelar.telar/GraphObserver.onEdgeFailed|onEdgeFailed(dev.deeptelar.telar.ObservedEdge;kotlin.Throwable){}[0]
+    open fun onEdgeStarted(dev.deeptelar.telar/ObservedEdge) // dev.deeptelar.telar/GraphObserver.onEdgeStarted|onEdgeStarted(dev.deeptelar.telar.ObservedEdge){}[0]
     open fun onNodeCompleted(dev.deeptelar.telar/ObservedNode) // dev.deeptelar.telar/GraphObserver.onNodeCompleted|onNodeCompleted(dev.deeptelar.telar.ObservedNode){}[0]
     open fun onNodeFailed(dev.deeptelar.telar/ObservedNode, kotlin/Throwable) // dev.deeptelar.telar/GraphObserver.onNodeFailed|onNodeFailed(dev.deeptelar.telar.ObservedNode;kotlin.Throwable){}[0]
     open fun onNodeInterrupted(dev.deeptelar.telar/ObservedNode) // dev.deeptelar.telar/GraphObserver.onNodeInterrupted|onNodeInterrupted(dev.deeptelar.telar.ObservedNode){}[0]
@@ -375,6 +379,13 @@ sealed interface <#A: out kotlin/Any?> dev.deeptelar.telar/GraphSnapshot { // de
     }
 }
 
+sealed interface dev.deeptelar.telar/ObservedCaller { // dev.deeptelar.telar/ObservedCaller|null[0]
+    abstract val run // dev.deeptelar.telar/ObservedCaller.run|{}run[0]
+        abstract fun <get-run>(): dev.deeptelar.telar/ObservedRun // dev.deeptelar.telar/ObservedCaller.run.<get-run>|<get-run>(){}[0]
+    abstract val step // dev.deeptelar.telar/ObservedCaller.step|{}step[0]
+        abstract fun <get-step>(): kotlin/Int // dev.deeptelar.telar/ObservedCaller.step.<get-step>|<get-step>(){}[0]
+}
+
 abstract class dev.deeptelar.telar/TelarException : kotlin/RuntimeException { // dev.deeptelar.telar/TelarException|null[0]
     constructor <init>(kotlin/String, kotlin/Throwable? = ...) // dev.deeptelar.telar/TelarException.<init>|<init>(kotlin.String;kotlin.Throwable?){}[0]
 }
@@ -656,7 +667,18 @@ final class dev.deeptelar.telar/NodeTimeoutException : dev.deeptelar.telar/Telar
         final fun <get-timeout>(): kotlin.time/Duration // dev.deeptelar.telar/NodeTimeoutException.timeout.<get-timeout>|<get-timeout>(){}[0]
 }
 
-final class dev.deeptelar.telar/ObservedNode { // dev.deeptelar.telar/ObservedNode|null[0]
+final class dev.deeptelar.telar/ObservedEdge : dev.deeptelar.telar/ObservedCaller { // dev.deeptelar.telar/ObservedEdge|null[0]
+    final val from // dev.deeptelar.telar/ObservedEdge.from|{}from[0]
+        final fun <get-from>(): kotlin/String // dev.deeptelar.telar/ObservedEdge.from.<get-from>|<get-from>(){}[0]
+    final val run // dev.deeptelar.telar/ObservedEdge.run|{}run[0]
+        final fun <get-run>(): dev.deeptelar.telar/ObservedRun // dev.deeptelar.telar/ObservedEdge.run.<get-run>|<get-run>(){}[0]
+    final val step // dev.deeptelar.telar/ObservedEdge.step|{}step[0]
+        final fun <get-step>(): kotlin/Int // dev.deeptelar.telar/ObservedEdge.step.<get-step>|<get-step>(){}[0]
+
+    final fun toString(): kotlin/String // dev.deeptelar.telar/ObservedEdge.toString|toString(){}[0]
+}
+
+final class dev.deeptelar.telar/ObservedNode : dev.deeptelar.telar/ObservedCaller { // dev.deeptelar.telar/ObservedNode|null[0]
     final val name // dev.deeptelar.telar/ObservedNode.name|{}name[0]
         final fun <get-name>(): kotlin/String // dev.deeptelar.telar/ObservedNode.name.<get-name>|<get-name>(){}[0]
     final val run // dev.deeptelar.telar/ObservedNode.run|{}run[0]
@@ -779,6 +801,7 @@ final suspend fun <#A: kotlin/Any?> dev.deeptelar.telar/effect(kotlin/String, de
 final suspend fun <#A: kotlin/Any?> dev.deeptelar.telar/interrupt(#A): kotlin/Nothing // dev.deeptelar.telar/interrupt|interrupt(0:0){0§<kotlin.Any?>}[0]
 final suspend fun dev.deeptelar.telar/effectId(): kotlin/String? // dev.deeptelar.telar/effectId|effectId(){}[0]
 final suspend fun dev.deeptelar.telar/forEachNodeObserver(kotlin/Function2<dev.deeptelar.telar/GraphObserver, dev.deeptelar.telar/ObservedNode, kotlin/Unit>) // dev.deeptelar.telar/forEachNodeObserver|forEachNodeObserver(kotlin.Function2<dev.deeptelar.telar.GraphObserver,dev.deeptelar.telar.ObservedNode,kotlin.Unit>){}[0]
+final suspend fun dev.deeptelar.telar/forEachObserver(kotlin/Function2<dev.deeptelar.telar/GraphObserver, dev.deeptelar.telar/ObservedCaller, kotlin/Unit>) // dev.deeptelar.telar/forEachObserver|forEachObserver(kotlin.Function2<dev.deeptelar.telar.GraphObserver,dev.deeptelar.telar.ObservedCaller,kotlin.Unit>){}[0]
 final suspend fun dev.deeptelar.telar/isProgressCollected(): kotlin/Boolean // dev.deeptelar.telar/isProgressCollected|isProgressCollected(){}[0]
 final suspend fun dev.deeptelar.telar/reportProgress(kotlin/Any) // dev.deeptelar.telar/reportProgress|reportProgress(kotlin.Any){}[0]
 final suspend fun dev.deeptelar.telar/store(): dev.deeptelar.telar/Store // dev.deeptelar.telar/store|store(){}[0]

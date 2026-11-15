@@ -15,6 +15,25 @@ breaking changes.
   `execute_tool <name>`, with `gen_ai.tool.name` and `gen_ai.tool.call.id`. Both observers are now an
   `AgentObserver`, and `telar-otel` depends on `telar-agent`.
   ([#138](https://github.com/deeptelar/telar/issues/138))
+- A `GraphObserver` is told about the condition of each edge that has one, with `onEdgeStarted`,
+  `onEdgeCompleted` (with the targets it chose) and `onEdgeFailed`, and adds to its coroutine
+  context with `edgeContext`. The observers of `telar-otel` record it as a span `telar.edge <from>`,
+  so the call that a `decisionEdge` makes to its model is reported and traced inside its edge.
+  `forEachObserver` reaches the observers from a node or a condition.
+  ([#157](https://github.com/deeptelar/telar/issues/157))
+
+### Changed
+
+- **Breaking:** `ObservedModelCall.node` and `ObservedToolCall.node` are now `caller`, an
+  `ObservedCaller`: the `ObservedNode` that made the call, or the `ObservedEdge` whose condition
+  made it. Replace `call.node` with `call.caller`; where you need the node's name, use
+  `(call.caller as? ObservedNode)?.name`, or a `when` over the two.
+  ([#157](https://github.com/deeptelar/telar/issues/157))
+
+### Deprecated
+
+- `forEachNodeObserver`, which only works inside a node. Use `forEachObserver`, which also works in
+  the condition of an edge and gives an `ObservedCaller`. ([#157](https://github.com/deeptelar/telar/issues/157))
 
 ## [0.1.0-alpha18] - 2026-11-06
 

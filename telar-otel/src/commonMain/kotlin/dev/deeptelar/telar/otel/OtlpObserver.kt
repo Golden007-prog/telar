@@ -1,8 +1,10 @@
 package dev.deeptelar.telar.otel
 
+import dev.deeptelar.telar.EdgeConditionException
 import dev.deeptelar.telar.GraphConfig
 import dev.deeptelar.telar.GraphValidationException
 import dev.deeptelar.telar.NodeExecutionException
+import dev.deeptelar.telar.ObservedEdge
 import dev.deeptelar.telar.ObservedNode
 import dev.deeptelar.telar.ObservedRun
 import dev.deeptelar.telar.TelarException
@@ -57,12 +59,15 @@ import kotlin.time.TimeSource
  *   event `telar.checkpoint` for each saved checkpoint.
  * - **A node** has the attributes `telar.node`, `telar.step` and `telar.outcome`, and an event
  *   `telar.retry` for each try that failed and was followed by another.
+ * - **An edge with a condition** is a span `telar.edge <from>` inside the run, with
+ *   `telar.edge.from`, `telar.step` (the step whose results it routes, 0 for an edge from `START`),
+ *   `telar.outcome`, and `telar.next_nodes`, what the condition chose. A plain edge has no span.
  * - **A failure** is recorded on the span of the node and of the run, as an event `exception` and
  *   the status `ERROR`. A cancelled node or run is not an error.
  *
  * **Calls to models and tools.** It is also an `AgentObserver`, so the calls that a node of
  * `toolLoop` or `toolAgent`, `ask`, `chatWithProgress` or a `ChatDecisionModel` makes are spans inside
- * the span of the node, named as the
+ * the span of the node, or of the edge for the condition of a `decisionEdge`, named as the
  * [semantic conventions for generative AI](https://opentelemetry.io/docs/specs/semconv/gen-ai/) name
  * them, so that a backend that knows them shows them as calls to a model:
  *
@@ -103,8 +108,8 @@ import kotlin.time.TimeSource
  * `cors.allowed_origins` in the `http` protocol of the `otlp` receiver of the OpenTelemetry
  * Collector. A key in [headers] can be read by everyone who opens the page.
  *
- * **What a node calls.** While a node runs, its coroutine context holds a [TraceContext] with the
- * ids of its span. The [Traceparent] plugin of Ktor sends them with each request, so that a server
+ * **What a node calls.** While a node or the condition of an edge runs, its coroutine context holds
+ * a [TraceContext] with the ids of its span. The [Traceparent] plugin of Ktor sends them with each request, so that a server
  * of the app records its spans inside the node.
  *
  * **Inside a trace of the app.** A run is a trace of its own, unless its coroutine context holds a
@@ -141,7 +146,7 @@ public class OtlpObserver(
 
     private val requestHeaders: Map<String, String> = headers.toMap()
 
-    /** The spans that started and have not ended, by the run, node or call they belong to. */
+    /** The spans that started and have not ended, by the run, node, edge or call they belong to. */
     private val open = AtomicReference<Map<Any, SpanRecord>>(emptyMap())
 
     /** The spans that ended and wait to be sent. */
@@ -265,8 +270,33 @@ public class OtlpObserver(
 
     override fun nodeContext(node: ObservedNode): CoroutineContext = open.load()[node]?.context ?: EmptyCoroutineContext
 
+    override fun onEdgeStarted(edge: ObservedEdge) {
+        val parent = open.load()[edge.run] ?: return
+        start(
+            edge,
+            name = "telar.edge ${edge.from}",
+            parent = parent.context,
+            attributes =
+                listOf(
+                    Attribute(EDGE_FROM, AttributeValue.Text(edge.from)),
+                    Attribute(STEP, AttributeValue.Number(edge.step.toLong())),
+                ),
+        )
+    }
+
+    override fun onEdgeCompleted(edge: ObservedEdge, targets: List<String>) {
+        end(edge) { it.with(OUTCOME, "completed").with(Attribute(NEXT_NODES, AttributeValue.Texts(targets))) }
+    }
+
+    override fun onEdgeFailed(edge: ObservedEdge, cause: Throwable) {
+        // An EdgeConditionException only says which edge failed, and the span says that already.
+        end(edge) { it.failed(if (cause is EdgeConditionException) cause.cause ?: cause else cause) }
+    }
+
+    override fun edgeContext(edge: ObservedEdge): CoroutineContext = open.load()[edge]?.context ?: EmptyCoroutineContext
+
     override fun onModelCallStarted(call: ObservedModelCall) {
-        val parent = open.load()[call.node] ?: return
+        val parent = open.load()[call.caller] ?: return
         start(
             call,
             name = CHAT,
@@ -285,7 +315,7 @@ public class OtlpObserver(
     }
 
     override fun onToolCallStarted(call: ObservedToolCall) {
-        val parent = open.load()[call.node] ?: return
+        val parent = open.load()[call.caller] ?: return
         val attributes =
             listOfNotNull(
                 Attribute(GEN_AI_OPERATION, AttributeValue.Text(EXECUTE_TOOL)),
@@ -498,6 +528,7 @@ private const val NANOS_PER_SECOND = 1_000_000_000L
 
 private const val THREAD_ID = "telar.thread_id"
 private const val NODE = "telar.node"
+private const val EDGE_FROM = "telar.edge.from"
 private const val NODES = "telar.nodes"
 private const val NEXT_NODES = "telar.next_nodes"
 private const val STEP = "telar.step"

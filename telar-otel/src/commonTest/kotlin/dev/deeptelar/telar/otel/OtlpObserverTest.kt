@@ -1,6 +1,7 @@
 package dev.deeptelar.telar.otel
 
 import dev.deeptelar.telar.END
+import dev.deeptelar.telar.EdgeConditionException
 import dev.deeptelar.telar.GraphConfig
 import dev.deeptelar.telar.GraphValidationException
 import dev.deeptelar.telar.MemoryCheckpointer
@@ -9,8 +10,10 @@ import dev.deeptelar.telar.Retry
 import dev.deeptelar.telar.START
 import dev.deeptelar.telar.StateGraph
 import dev.deeptelar.telar.agent.AgentState
+import dev.deeptelar.telar.agent.ChatDecisionModel
 import dev.deeptelar.telar.agent.TokenUsage
 import dev.deeptelar.telar.agent.Tool
+import dev.deeptelar.telar.agent.decisionEdge
 import dev.deeptelar.telar.agent.toolAgent
 import dev.deeptelar.telar.interrupt
 import dev.deeptelar.telar.test.ScriptedChatModel
@@ -163,6 +166,80 @@ class OtlpObserverTest {
             assertEquals(1, tool.json.text("kind")!!.toInt())
             assertNull(tool.statusCode)
             assertEquals(setOf(spans.span("telar.run").traceId), spans.map { it.traceId }.toSet())
+        }
+
+    @Test
+    fun `an edge with a condition is a span of the run with the call of its model inside`() =
+        runTest {
+            val tracing = tracing()
+            val chat = ScriptedChatModel { says("""{"decision": {"refund": 0.1, "technical": 0.9}}""", TokenUsage(30, 4)) }
+            val graph =
+                StateGraph<Ticket> {
+                    val read = node("read") { it.copy(text = "It crashes") }
+                    val refund = node("refund") { it }
+                    val technical = node("technical") { it }
+                    START then read
+                    decisionEdge(
+                        read,
+                        ChatDecisionModel(chat),
+                        "Which team?",
+                        routes = mapOf(refund to null, technical to null),
+                    ) { it.text }
+                }.compile()
+
+            graph.invoke(Ticket(), config(tracing))
+            val spans = tracing.sent()
+
+            val edge = spans.span("telar.edge read")
+            assertEquals(spans.span("telar.run").spanId, edge.parentSpanId)
+            assertEquals("read", edge.string("telar.edge.from"))
+            assertEquals(1L, edge.long("telar.step"))
+            assertEquals(listOf("technical"), edge.strings("telar.next_nodes"))
+            assertEquals("completed", edge.string("telar.outcome"))
+            val call = spans.span("chat")
+            assertEquals(edge.spanId, call.parentSpanId)
+            assertEquals(30L, call.long("gen_ai.usage.input_tokens"))
+        }
+
+    @Test
+    fun `a condition that fails is an error of its edge`() =
+        runTest {
+            val tracing = tracing()
+            val graph =
+                StateGraph<Ticket> {
+                    val read = node("read") { it }
+                    START then read
+                    conditionalEdge(read, setOf(END)) { error("No route for this ticket.") }
+                }.compile()
+
+            assertFailsWith<EdgeConditionException> { graph.invoke(Ticket(), config(tracing)) }
+            val edge = tracing.sent().span("telar.edge read")
+
+            assertEquals("failed", edge.string("telar.outcome"))
+            assertEquals(2, edge.statusCode)
+            assertEquals("No route for this ticket.", edge.statusMessage)
+        }
+
+    @Test
+    fun `a condition runs with the ids of its span`() =
+        runTest {
+            val tracing = tracing()
+            var seen: TraceContext? = null
+            val graph =
+                StateGraph<Ticket> {
+                    val read = node("read") { it }
+                    START then read
+                    conditionalEdge(read, setOf(END)) {
+                        seen = currentCoroutineContext()[TraceContext]
+                        END
+                    }
+                }.compile()
+
+            graph.invoke(Ticket(), config(tracing))
+            val edge = tracing.sent().span("telar.edge read")
+
+            assertEquals(edge.traceId, seen?.traceId)
+            assertEquals(edge.spanId, seen?.spanId)
         }
 
     @Test

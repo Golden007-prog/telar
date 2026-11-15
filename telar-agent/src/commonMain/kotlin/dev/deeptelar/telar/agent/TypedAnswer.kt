@@ -34,7 +34,7 @@ import kotlinx.serialization.serializer
  * property that is missing or has the wrong type, and a `require` in the `init` of [Answer] that
  * fails, so a `require` is a way to check an answer: its message goes to the model.
  *
- * In a streamed run, the model's JSON is not reported as progress. In a node, the [AgentObserver]s
+ * In a streamed run, the model's JSON is not reported as progress. In a node or a condition, the [AgentObserver]s
  * of the run are told about each time the model is asked, so an answer that was asked again is two
  * calls.
  *

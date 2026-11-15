@@ -1,13 +1,15 @@
 package dev.deeptelar.telar
 
 import kotlinx.coroutines.currentCoroutineContext
+import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.time.Duration
 
 /**
  * Watches the runs of a graph: when a run starts and how it ends, when each node starts and how it
- * ends, which nodes come next after a step, and when a checkpoint is saved. Use it to send traces
+ * ends, when the condition of an edge decides where the run goes, which nodes come next after a
+ * step, and when a checkpoint is saved. Use it to send traces
  * and metrics to the tools a team already has, such as OpenTelemetry with `telar-otel`. Give it to
  * a run with [GraphConfig.observers]:
  *
@@ -28,7 +30,8 @@ import kotlin.time.Duration
  *   timing and failures. [onNodeProgress] is the one exception: it gets what a node reports.
  * - **Every start has one end.** A run that started ends with exactly one of [onRunCompleted],
  *   [onRunInterrupted] and [onRunFailed], and a node that started ends with exactly one of
- *   [onNodeCompleted], [onNodeInterrupted] and [onNodeFailed], also when the run is cancelled.
+ *   [onNodeCompleted], [onNodeInterrupted] and [onNodeFailed], also when the run is cancelled. An
+ *   edge that started ends with exactly one of [onEdgeCompleted] and [onEdgeFailed].
  * - **Calls from several coroutines.** The nodes of a step run in parallel and call the observer at
  *   the same time, possibly on different threads. An observer that keeps data must be safe for that.
  *
@@ -88,6 +91,24 @@ public interface GraphObserver {
     public fun onNodeFailed(node: ObservedNode, cause: Throwable) {}
 
     /**
+     * The condition of [edge] starts, on the state that its step left. Only an edge with a condition
+     * is reported: `conditionalEdge`, `conditionalFanOut` and the edges built on them, such as
+     * `decisionEdge`. The conditions of a step run one after the other, after every node of the step
+     * ended and before [onStepCompleted].
+     */
+    public fun onEdgeStarted(edge: ObservedEdge) {}
+
+    /** The condition of [edge] chose [targets], [END] among them when it ends a branch. */
+    public fun onEdgeCompleted(edge: ObservedEdge, targets: List<String>) {}
+
+    /**
+     * The condition of [edge] failed with [cause]: an [EdgeConditionException] when it threw, an
+     * [InvalidRouteException] when it chose a node that it may not go to, or a
+     * `CancellationException` when the run was cancelled.
+     */
+    public fun onEdgeFailed(edge: ObservedEdge, cause: Throwable) {}
+
+    /**
      * Step [step] of [run] finished: [nodes] ran, their results were combined and the edges chose
      * [nextNodes]. An empty [nextNodes] means the run completes.
      */
@@ -105,6 +126,12 @@ public interface GraphObserver {
      * each step, after [onNodeStarted].
      */
     public fun nodeContext(node: ObservedNode): CoroutineContext = EmptyCoroutineContext
+
+    /**
+     * Returns what to add to the coroutine context in which the condition of [edge] runs, like
+     * [nodeContext] for a node. Called once for each edge, after [onEdgeStarted].
+     */
+    public fun edgeContext(edge: ObservedEdge): CoroutineContext = EmptyCoroutineContext
 }
 
 /**
@@ -128,6 +155,19 @@ public class ObservedRun internal constructor(
 }
 
 /**
+ * The part of a run whose code is running: a node, or the condition of an edge. A library that
+ * reports what happens inside, such as the calls to models of `telar-agent`, reports it under the
+ * caller that [forEachObserver] gives.
+ */
+public sealed interface ObservedCaller {
+    /** The run the caller belongs to. */
+    public val run: ObservedRun
+
+    /** The step of [run] in which the caller runs. */
+    public val step: Int
+}
+
+/**
  * A node in one step of a run, which a [GraphObserver] is told about. It is the same object from the
  * start of the node to its end.
  *
@@ -136,30 +176,71 @@ public class ObservedRun internal constructor(
  * @property name the name of the node.
  */
 public class ObservedNode internal constructor(
-    public val run: ObservedRun,
-    public val step: Int,
+    override val run: ObservedRun,
+    override val step: Int,
     public val name: String,
-) {
+) : ObservedCaller {
     override fun toString(): String = "node '$name' in step $step"
 }
 
 /**
- * Calls [notify] with each observer of the run and the node that runs this code, so that a library
- * can tell observers of its own kind about what happens inside a node. `telar-agent` tells its
- * `AgentObserver`s about the calls to models and tools this way:
+ * An edge with a condition, which a [GraphObserver] is told about when the condition runs. It is the
+ * same object from the start of the condition to its end.
+ *
+ * @property run the run the edge belongs to.
+ * @property step the step whose results the edge routes: the step in which [from] ran, or 0 for an
+ * edge from [START] when the run starts.
+ * @property from the node the edge leaves, or [START].
+ */
+public class ObservedEdge internal constructor(
+    override val run: ObservedRun,
+    override val step: Int,
+    public val from: String,
+) : ObservedCaller {
+    override fun toString(): String = "edge from '$from' after step $step"
+}
+
+/**
+ * Calls [notify] with each observer of the run and the node or edge that runs this code, so that a
+ * library can tell observers of its own kind about what happens inside a node or in the condition of
+ * an edge. `telar-agent` tells its `AgentObserver`s about the calls to models and tools this way:
  *
  * ```kotlin
- * forEachNodeObserver { observer, node -> (observer as? CacheObserver)?.onCacheHit(node) }
+ * forEachObserver { observer, caller -> (observer as? CacheObserver)?.onCacheHit(caller) }
  * ```
  *
  * The rules of [GraphObserver] hold for what the observers are told. Does nothing outside a running
- * node. In a subgraph, the node is the node of the subgraph that runs this code.
+ * node or condition. In a subgraph, the caller is the node or edge of the subgraph that runs this
+ * code.
  */
+public suspend fun forEachObserver(notify: (observer: GraphObserver, caller: ObservedCaller) -> Unit) {
+    val current = currentCoroutineContext()[ObservingCaller] ?: return
+    val observer = current.observer
+    val observers = if (observer is ObserverGroup) observer.observers else listOf(observer)
+    observers.forEach { notify(it, current.caller) }
+}
+
+/**
+ * Calls [notify] with each observer of the run and the node that runs this code. Does nothing outside
+ * a running node, also in the condition of an edge.
+ */
+@Deprecated(
+    "Use forEachObserver, which also reports in the condition of an edge. Its caller is an ObservedNode inside a node.",
+    ReplaceWith("forEachObserver(notify)"),
+)
 public suspend fun forEachNodeObserver(notify: (observer: GraphObserver, node: ObservedNode) -> Unit) {
     val running = currentCoroutineContext()[RunningNode] ?: return
     val observer = running.observer
     val observers = if (observer is ObserverGroup) observer.observers else listOf(observer)
     observers.forEach { notify(it, running.observed) }
+}
+
+/** The observer of the run and the node or edge whose code runs in this coroutine, for [forEachObserver]. */
+internal class ObservingCaller(
+    val observer: GraphObserver,
+    val caller: ObservedCaller,
+) : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<ObservingCaller>
 }
 
 /** The observers of a config, told about everything as one. */
@@ -190,6 +271,12 @@ private class ObserverGroup(
 
     override fun onNodeFailed(node: ObservedNode, cause: Throwable) = observers.forEach { it.onNodeFailed(node, cause) }
 
+    override fun onEdgeStarted(edge: ObservedEdge) = observers.forEach { it.onEdgeStarted(edge) }
+
+    override fun onEdgeCompleted(edge: ObservedEdge, targets: List<String>) = observers.forEach { it.onEdgeCompleted(edge, targets) }
+
+    override fun onEdgeFailed(edge: ObservedEdge, cause: Throwable) = observers.forEach { it.onEdgeFailed(edge, cause) }
+
     override fun onStepCompleted(run: ObservedRun, step: Int, nodes: List<String>, nextNodes: List<String>) =
         observers.forEach { it.onStepCompleted(run, step, nodes, nextNodes) }
 
@@ -198,6 +285,9 @@ private class ObserverGroup(
 
     override fun nodeContext(node: ObservedNode): CoroutineContext =
         observers.fold<GraphObserver, CoroutineContext>(EmptyCoroutineContext) { context, observer -> context + observer.nodeContext(node) }
+
+    override fun edgeContext(edge: ObservedEdge): CoroutineContext =
+        observers.fold<GraphObserver, CoroutineContext>(EmptyCoroutineContext) { context, observer -> context + observer.edgeContext(edge) }
 }
 
 /**

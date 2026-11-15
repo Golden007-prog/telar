@@ -1,23 +1,24 @@
 package dev.deeptelar.telar.agent
 
 import dev.deeptelar.telar.GraphObserver
+import dev.deeptelar.telar.ObservedCaller
+import dev.deeptelar.telar.ObservedEdge
 import dev.deeptelar.telar.ObservedNode
-import dev.deeptelar.telar.forEachNodeObserver
+import dev.deeptelar.telar.forEachObserver
 
 /**
  * A [GraphObserver] that is also told about the calls to models and tools inside the nodes of a
- * run: those of [toolLoop] and [toolAgent], of [chatWithProgress], of [ask] (each time it asks), of
- * a [ChatDecisionModel], and of [execute][List.execute]. A call outside a node is not reported, and
- * that includes the call of a [decisionEdge], whose condition runs after its node has ended. To see
- * it, decide in a node with [choose], store the decision in the state and route on it with
- * `conditionalEdge`.
+ * run and in the conditions of its edges: those of [toolLoop] and [toolAgent], of
+ * [chatWithProgress], of [ask] (each time it asks), of a [ChatDecisionModel], also in a
+ * [decisionEdge], and of [execute][List.execute]. Each call says which [caller][ObservedModelCall.caller]
+ * made it: an [ObservedNode], or an [ObservedEdge] for the condition of an edge.
  * Use it to count the tokens of a run, log which tools ran, or show them in a debugger. Give it to a
  * run in `GraphConfig.observers`, like any observer:
  *
  * ```kotlin
  * val cost = object : AgentObserver {
  *     override fun onModelCallCompleted(call: ObservedModelCall, usage: TokenUsage?) {
- *         println("${call.node.name}: ${usage?.total ?: 0} tokens")
+ *         println("${call.caller}: ${usage?.total ?: 0} tokens")
  *     }
  * }
  * agent.invoke(AgentState("Where is my pizza?"), GraphConfig(observers = listOf(cost)))
@@ -31,7 +32,7 @@ import dev.deeptelar.telar.forEachNodeObserver
  *   [onToolCallCompleted] and [onToolCallFailed], also when the run is cancelled.
  * - **Calls from several coroutines**, because the tools of an answer run at the same time.
  *
- * A call outside a running node, or straight to [ChatModel.chat], is not reported.
+ * A call outside a running node or condition, or straight to [ChatModel.chat], is not reported.
  */
 public interface AgentObserver : GraphObserver {
     /** [call] asks its model. A try of a node with a `retry` asks again, as a new call. */
@@ -63,36 +64,38 @@ public interface AgentObserver : GraphObserver {
  * A call to a model that an [AgentObserver] is told about. It is the same object from the start of
  * the call to its end.
  *
- * @property node the node that makes the call.
+ * @property caller what makes the call: an [ObservedNode], or an [ObservedEdge] whose condition
+ * makes it, such as that of a [decisionEdge].
  * @property model the model that is called.
  */
 public class ObservedModelCall internal constructor(
-    public val node: ObservedNode,
+    public val caller: ObservedCaller,
     public val model: ChatModel,
 ) {
-    override fun toString(): String = "model call in $node"
+    override fun toString(): String = "model call in $caller"
 }
 
 /**
  * A call to a tool that an [AgentObserver] is told about. It is the same object from the start of
  * the call to its end.
  *
- * @property node the node that makes the call.
+ * @property caller what makes the call: an [ObservedNode], or an [ObservedEdge] whose condition
+ * makes it.
  * @property name the name of the tool the model called.
  * @property id the id the model gave the call, which its result carries as well.
  */
 public class ObservedToolCall internal constructor(
-    public val node: ObservedNode,
+    public val caller: ObservedCaller,
     public val name: String,
     public val id: String,
 ) {
-    override fun toString(): String = "call of tool '$name' in $node"
+    override fun toString(): String = "call of tool '$name' in $caller"
 }
 
 /** Runs [block], which calls [model], and tells the agent observers of the run about it. */
 internal suspend fun observeModelCall(model: ChatModel, block: suspend () -> ChatResponse): ChatResponse {
-    val (node, observers) = agentObservers() ?: return block()
-    val call = ObservedModelCall(node, model)
+    val (caller, observers) = agentObservers() ?: return block()
+    val call = ObservedModelCall(caller, model)
     observers.forEach { it.onModelCallStarted(call) }
     val response =
         try {
@@ -107,8 +110,8 @@ internal suspend fun observeModelCall(model: ChatModel, block: suspend () -> Cha
 
 /** Runs [block], which runs the tool of [toolCall], and tells the agent observers of the run about it. */
 internal suspend fun observeToolCall(toolCall: ToolCall, block: suspend () -> ChatMessage.ToolResult): ChatMessage.ToolResult {
-    val (node, observers) = agentObservers() ?: return block()
-    val call = ObservedToolCall(node, toolCall.name, toolCall.id)
+    val (caller, observers) = agentObservers() ?: return block()
+    val call = ObservedToolCall(caller, toolCall.name, toolCall.id)
     observers.forEach { it.onToolCallStarted(call) }
     val result =
         try {
@@ -121,13 +124,13 @@ internal suspend fun observeToolCall(toolCall: ToolCall, block: suspend () -> Ch
     return result
 }
 
-/** The node that runs this code and the agent observers of its run, or `null` when there are none. */
-private suspend fun agentObservers(): Pair<ObservedNode, List<AgentObserver>>? {
-    var node: ObservedNode? = null
+/** The node or edge that runs this code and the agent observers of its run, or `null` when there are none. */
+private suspend fun agentObservers(): Pair<ObservedCaller, List<AgentObserver>>? {
+    var caller: ObservedCaller? = null
     val observers = mutableListOf<AgentObserver>()
-    forEachNodeObserver { observer, observed ->
-        node = observed
+    forEachObserver { observer, observed ->
+        caller = observed
         if (observer is AgentObserver) observers += observer
     }
-    return node?.takeIf { observers.isNotEmpty() }?.let { it to observers }
+    return caller?.takeIf { observers.isNotEmpty() }?.let { it to observers }
 }

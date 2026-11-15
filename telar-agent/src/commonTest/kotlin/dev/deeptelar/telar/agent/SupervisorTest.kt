@@ -331,7 +331,7 @@ class SupervisorTest {
                 object : AgentObserver {
                     override fun onModelCallStarted(call: ObservedModelCall) {
                         calledBy +=
-                            call.node.run.parent
+                            call.caller.run.parent
                                 ?.name
                     }
                 }
