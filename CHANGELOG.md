@@ -9,6 +9,9 @@ breaking changes.
 
 ### Added
 
+- `telar-bom`, a bill of materials: `implementation(platform("dev.deeptelar:telar-bom:<version>"))`
+  names the version once, and every module of Telar that the app adds gets it. It names the
+  artifact of each platform too, for Maven builds. ([#79](https://github.com/deeptelar/telar/issues/79))
 - `OtlpObserver` and `OpenTelemetryObserver` of `telar-otel` record a span for each call to a model
   and each tool call inside the span of its node, with the names of the OpenTelemetry semantic
   conventions for generative AI: `chat`, with the tokens of the call in `gen_ai.usage.*`, and
