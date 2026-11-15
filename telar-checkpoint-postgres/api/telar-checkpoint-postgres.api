@@ -1,0 +1,23 @@
+public final class dev/deeptelar/telar/checkpoint/postgres/PostgresCheckpointer : dev/deeptelar/telar/Checkpointer {
+	public static final field DEFAULT_TABLE Ljava/lang/String;
+	public fun <init> (Ljavax/sql/DataSource;Ldev/deeptelar/telar/StateSerializer;Ljava/lang/String;IZ)V
+	public synthetic fun <init> (Ljavax/sql/DataSource;Ldev/deeptelar/telar/StateSerializer;Ljava/lang/String;IZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun delete (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun history (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun load (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun save (Ljava/lang/String;Ldev/deeptelar/telar/Checkpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/deeptelar/telar/checkpoint/postgres/PostgresStore : dev/deeptelar/telar/Store {
+	public static final field DEFAULT_TABLE Ljava/lang/String;
+	public static final field MICROS_PER_SECOND J
+	public static final field NANOS_PER_MICRO J
+	public fun <init> (Ljavax/sql/DataSource;Ljava/lang/String;Lkotlin/time/Clock;Z)V
+	public synthetic fun <init> (Ljavax/sql/DataSource;Ljava/lang/String;Lkotlin/time/Clock;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun delete (Ljava/util/List;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun get (Ljava/util/List;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun list (Ljava/util/List;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun put (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun search (Ljava/util/List;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
