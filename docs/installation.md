@@ -21,6 +21,28 @@ dependencies {
 }
 ```
 
+## One version for every module
+
+`telar-bom` names the version of every module of Telar, so an app writes it once and cannot mix
+versions:
+
+::: info Not on Maven Central yet
+`telar-bom` comes with the next release. Until then, name the version in each module as above.
+:::
+
+```kotlin
+dependencies {
+    implementation(platform("dev.deeptelar:telar-bom:<version>"))
+    implementation("dev.deeptelar:telar-core")
+    implementation("dev.deeptelar:telar-agent")
+    implementation("dev.deeptelar:telar-anthropic")
+    testImplementation("dev.deeptelar:telar-test")
+}
+```
+
+It also names the artifact of each platform, such as `telar-core-jvm`, so a Maven build can import
+it in `<dependencyManagement>` with `<scope>import</scope>` and leave the versions out too.
+
 > Until `0.1.0-alpha05` the project was called langgraph-kt, and its artifacts were
 > `io.github.cuento3yllevo2:langgraph-kt-*`. The [changelog](https://github.com/deeptelar/telar/blob/main/CHANGELOG.md) says how to update.
 
@@ -38,6 +60,7 @@ dependencies {
 | `telar-typesafe` | same as core | `TypeSafeDecisionModel`: Jev, the decision model of TypeSafe AI, through Ktor |
 | `telar-mcp` | same as core | `mcpTools`: the tools of a [Model Context Protocol server](guides/mcp.md) as tools of an agent, on the Kotlin SDK of MCP. |
 | `telar-otel` | same as core | `OtlpObserver`: the runs and nodes of a graph as [OpenTelemetry traces](guides/tracing.md), sent over HTTP with Ktor on every platform. On the JVM also `OpenTelemetryObserver`, for the OpenTelemetry SDK of Java. |
+| `telar-bom` | none: a bill of materials | The version of every module above, for `platform(...)` |
 | `telar-test` | same as core | `ScriptedChatModel`, `ScriptedDecisionModel`, `record()`, and `graph.test { }` / `graph.replay { }` for the path of a run, for [tests](guides/testing.md) of a graph. |
 
 Requires Kotlin 2.x. JVM artifacts target Java 11, except `telar-langchain4j`, which needs

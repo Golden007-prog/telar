@@ -96,6 +96,9 @@ made under that name keep it. The repository is `deeptelar/telar` and the demo i
   script that is too short throws an `AssertionError`, which the engine passes on. `record()`
   collects a stream into a `RunRecord` (`nodes`, `steps`, `text`, `result`). The tests of
   `telar-agent` do not use it: they have their own `ScriptedModel`
+- **`telar-bom`** (Java platform): the bill of materials. It lists every artifact that the projects
+  named `telar-*` publish, the platform artifacts of each multiplatform module included, so a new
+  module is in it without a change
 - **`samples`**: runnable examples with tests; not published. `samples/.../tutorial/levelN` is the
   code of the tutorial in `docs/tutorial/`; a page shows its level's code and output, so change both together
 - **`docs`**: the documentation site (VitePress), published at <https://deeptelar.github.io/telar/>
@@ -105,7 +108,7 @@ made under that name keep it. The repository is `deeptelar/telar` and the demo i
   README. Links between pages are relative and end in `.md`; links to files outside `docs/` are
   full GitHub addresses
 - **`build-logic`**: convention plugins `telar.kmp-library`, `telar.web-library`,
-  `telar.jvm-library`, `telar.quality` (ktlint, Kover, Dokka), `telar.publishing`,
+  `telar.jvm-library`, `telar.quality` (ktlint, Kover, Dokka), `telar.publishing` (also used by `telar-bom`),
   `telar.root`
 
 ### Execution Flow
