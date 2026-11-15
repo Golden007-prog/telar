@@ -4,6 +4,8 @@ import dev.deeptelar.telar.GraphConfig
 import dev.deeptelar.telar.GraphObserver
 import dev.deeptelar.telar.MemoryCheckpointer
 import dev.deeptelar.telar.NodeExecutionException
+import dev.deeptelar.telar.ObservedCaller
+import dev.deeptelar.telar.ObservedEdge
 import dev.deeptelar.telar.ObservedNode
 import dev.deeptelar.telar.START
 import dev.deeptelar.telar.StateGraph
@@ -13,7 +15,16 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertSame
+
+/** Where a call was made: `node@step`, or `edge from node@step` for the condition of an edge. */
+private val ObservedCaller.label: String
+    get() =
+        when (this) {
+            is ObservedNode -> "$name@$step"
+            is ObservedEdge -> "edge from $from@$step"
+        }
 
 /** Writes down the calls it is told about, one line per call. */
 private class CallRecorder : AgentObserver {
@@ -26,27 +37,27 @@ private class CallRecorder : AgentObserver {
 
     override fun onModelCallStarted(call: ObservedModelCall) {
         modelCalls += call
-        log += "${call.node.name}@${call.node.step} asks the model"
+        log += "${call.caller.label} asks the model"
     }
 
     override fun onModelCallCompleted(call: ObservedModelCall, usage: TokenUsage?) {
-        log += "${call.node.name}@${call.node.step} got an answer, ${usage?.total ?: "no"} tokens"
+        log += "${call.caller.label} got an answer, ${usage?.total ?: "no"} tokens"
     }
 
     override fun onModelCallFailed(call: ObservedModelCall, cause: Throwable) {
-        log += "${call.node.name}@${call.node.step} model failed: ${cause.message}"
+        log += "${call.caller.label} model failed: ${cause.message}"
     }
 
     override fun onToolCallStarted(call: ObservedToolCall) {
-        log += "${call.node.name}@${call.node.step} runs ${call.name} (${call.id})"
+        log += "${call.caller.label} runs ${call.name} (${call.id})"
     }
 
     override fun onToolCallCompleted(call: ObservedToolCall, isError: Boolean) {
-        log += "${call.node.name}@${call.node.step} ${call.name} ${if (isError) "returned an error" else "returned"}"
+        log += "${call.caller.label} ${call.name} ${if (isError) "returned an error" else "returned"}"
     }
 
     override fun onToolCallFailed(call: ObservedToolCall, cause: Throwable) {
-        log += "${call.node.name}@${call.node.step} ${call.name} ended without a result"
+        log += "${call.caller.label} ${call.name} ended without a result"
     }
 }
 
@@ -184,7 +195,7 @@ class AgentObserverTest {
         }
 
     @Test
-    fun `the call of a decision edge is not reported because it runs outside a node`() =
+    fun `the call of a decision edge is reported under its edge`() =
         runTest {
             val chat = ScriptedModel(says("""{"decision": {"refund": 0.1, "technical": 0.9}}""").using(30, 4))
             val graph =
@@ -198,8 +209,44 @@ class AgentObserverTest {
 
             graph.invoke(AgentState("Hi"), config)
 
-            assertEquals(listOf("technical@1 started"), recorder.log)
-            assertEquals(1, chat.requests.size)
+            assertEquals(
+                listOf(
+                    "edge from __START__@0 asks the model",
+                    "edge from __START__@0 got an answer, 34 tokens",
+                    "technical@1 started",
+                ),
+                recorder.log,
+            )
+            val edge = assertIs<ObservedEdge>(recorder.modelCalls.single().caller)
+            assertEquals(START, edge.from)
+        }
+
+    @Test
+    fun `the call of a decision edge after a node is reported in the step of that node`() =
+        runTest {
+            val chat = ScriptedModel(says("""{"decision": {"refund": 0.8, "technical": 0.2}}""").using(30, 4))
+            val graph =
+                StateGraph<AgentState> {
+                    val read = node("read") { it }
+                    val refund = node("refund") { it }
+                    val technical = node("technical") { it }
+                    START then read
+                    decisionEdge(read, ChatDecisionModel(chat), "Which team?", routes = mapOf(refund to null, technical to null)) {
+                        "Cold pizza"
+                    }
+                }.compile()
+
+            graph.invoke(AgentState("Hi"), config)
+
+            assertEquals(
+                listOf(
+                    "read@1 started",
+                    "edge from read@1 asks the model",
+                    "edge from read@1 got an answer, 34 tokens",
+                    "refund@2 started",
+                ),
+                recorder.log,
+            )
         }
 
     @Test
