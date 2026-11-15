@@ -290,7 +290,7 @@ public class CompiledGraph<State> internal constructor(
             validateInterrupts(config)
             // Drop the previous run now, so that a failure before the first save cannot be resumed into it.
             config.checkpointer?.delete(config.threadId)
-            val firstNodes = resolveNextNodes(listOf(START), input)
+            val firstNodes = resolveNextNodes(listOf(START), input, watch, step = 0)
             // Save the input before anything runs, so that a failure in the first step can be resumed.
             val saved = Checkpoint(input, firstNodes)
             config.checkpointer?.let { checkpointer ->
@@ -370,7 +370,7 @@ public class CompiledGraph<State> internal constructor(
             val position = parent.position
             val start =
                 if (position == null) {
-                    RunStart(state, resolveNextNodes(listOf(START), state), step = 0, skipInterruptBefore = false)
+                    RunStart(state, resolveNextNodes(listOf(START), state, watch, step = 0), step = 0, skipInterruptBefore = false)
                 } else {
                     RunStart(state, position.nextNodes, position.step, position.interruptedBefore, position.subgraphs)
                 }
@@ -523,7 +523,7 @@ public class CompiledGraph<State> internal constructor(
             // Only the first step of a resumed run continues inside a subgraph, and has effects that ran before.
             subgraphs = emptyMap()
             effects = emptyMap()
-            val nextNodes = resolveNextNodes(activeNodes, state)
+            val nextNodes = resolveNextNodes(activeNodes, state, watch, step)
             watch.observer.onStepCompleted(watch.run, step, activeNodes, nextNodes)
             val saved = save(Checkpoint(state, nextNodes, step))
             emit(GraphEvent.StepCompleted(step, activeNodes, state))
@@ -793,6 +793,7 @@ public class CompiledGraph<State> internal constructor(
     ): NodeOutput<State> =
         withContext(
             context +
+                ObservingCaller(run.watch.observer, observed) +
                 RunningNode(
                     node.name,
                     run.threadId,
@@ -826,12 +827,12 @@ public class CompiledGraph<State> internal constructor(
         }
 
     /** Returns the nodes to run after [currentNodes], without [END]. */
-    private suspend fun resolveNextNodes(currentNodes: List<String>, state: State): List<String> {
+    private suspend fun resolveNextNodes(currentNodes: List<String>, state: State, watch: RunWatch, step: Int): List<String> {
         val nextNodes = mutableListOf<String>()
         for (node in currentNodes) {
             val conditionalEdge = conditionalEdges[node]
             if (conditionalEdge != null) {
-                nextNodes.addAll(route(conditionalEdge, state))
+                nextNodes.addAll(route(conditionalEdge, state, watch, step))
             } else {
                 nextNodes.addAll(edges[node].orEmpty())
             }
@@ -839,11 +840,25 @@ public class CompiledGraph<State> internal constructor(
         return nextNodes.distinct() - END
     }
 
-    private suspend fun route(edge: ConditionalEdge<State>, state: State): Set<String> {
-        val targets = wrapFailure({ EdgeConditionException(edge.from, it) }) { edge.condition(state) }
-        targets
-            .firstOrNull { target -> !(edge.targets?.contains(target) ?: (target == END || target in nodes)) }
-            ?.let { throw InvalidRouteException(edge.from, it) }
+    /** Runs the condition of [edge] on [state], told to the observers of [watch] as an edge of [step]. */
+    private suspend fun route(edge: ConditionalEdge<State>, state: State, watch: RunWatch, step: Int): Set<String> {
+        val observer = watch.observer
+        val observed = ObservedEdge(watch.run, step, edge.from)
+        observer.onEdgeStarted(observed)
+        val targets =
+            try {
+                withContext(observer.edgeContext(observed) + ObservingCaller(observer, observed)) {
+                    wrapFailure({ EdgeConditionException(edge.from, it) }) { edge.condition(state) }
+                }.also { targets ->
+                    targets
+                        .firstOrNull { target -> !(edge.targets?.contains(target) ?: (target == END || target in nodes)) }
+                        ?.let { throw InvalidRouteException(edge.from, it) }
+                }
+            } catch (failure: Throwable) {
+                observer.onEdgeFailed(observed, failure)
+                throw failure
+            }
+        observer.onEdgeCompleted(observed, targets.toList())
         return targets
     }
 

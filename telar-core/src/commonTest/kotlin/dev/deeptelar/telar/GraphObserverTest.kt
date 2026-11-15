@@ -448,7 +448,8 @@ class GraphObserverTest {
         }
 
     @Test
-    fun `a node reaches every observer of its run with itself and nothing outside a node`() =
+    @Suppress("DEPRECATION")
+    fun `forEachNodeObserver reaches every observer of its run with the node and nothing outside a node`() =
         runTest {
             val second = Recorder()
             val reached = mutableListOf<String>()
