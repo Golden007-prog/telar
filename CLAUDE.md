@@ -63,7 +63,8 @@ made under that name keep it. The repository is `deeptelar/telar` and the demo i
   its own conversation, and the supervisor's tool call `ask_<name>` gives it a task. `handoffTeam` shares one conversation
   between agents, which pass it on with `transfer_to_<name>`; at each hand-off the node `handover` turns
   tool calls into notes and removes `providerContent`. `AgentObserver` is a `GraphObserver` that is also
-  told about the calls to models and tools in a node; it reaches the run's observers with `forEachNodeObserver` of core.
+  told about the calls to models and tools in a node or an edge's condition (`call.caller` is an `ObservedNode` or an
+  `ObservedEdge`); it reaches the run's observers with `forEachObserver` of core.
   `memoryTools` (`remember`, `forget`, `recall`) work on the `Store` of the run (`store()` of core);
   `SemanticStore` wraps any `Store` and makes its `search` find by meaning with an `EmbeddingModel`,
   keeping the vectors in the store under `SemanticStore.VECTORS`
@@ -148,7 +149,7 @@ active nodes. A checkpoint is saved after every step when a checkpointer is conf
 | `EdgeCondition<State>` | `suspend (State) -> String`, routes to the next node name or `END` |
 | `Reducer<State>` | `fun interface` with a suspend `reduce`; merges whole states of parallel nodes; not needed for work/update nodes. `mergeRules { append(...); replace(...); merge(...) }` builds one from a rule per property; given to `compile()` as `rules` or as `reducer`, the rules hold for work/update nodes too (each node reads the state from before the step) |
 | `GraphConfig<State>` | `threadId`, `checkpointer`, `interruptBefore/After` (sets), `maxIterations`, `observers`, `store` |
-| `GraphObserver` | Told when a run, a node or a step starts and ends, and when a checkpoint is saved; never gets the state. `nodeContext` adds to the coroutine context of a node |
+| `GraphObserver` | Told when a run, a node, an edge's condition or a step starts and ends, and when a checkpoint is saved; never gets the state. `nodeContext` / `edgeContext` add to the coroutine context of a node / condition |
 | `GraphResult<State>` / `GraphEvent<State>` | Outcome of `invoke`/`resume`, and events from `stream` (per node and per step) |
 | `GraphTopology` | Nodes and edges of a compiled graph, from `CompiledGraph.topology` |
 | `Checkpointer<State>` | `save` / `load` / `delete` per thread, and `history` (one checkpoint per step; the default returns only the latest). `CompiledGraph.history` reads it and `fork` continues from an earlier checkpoint on a new thread |

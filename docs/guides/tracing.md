@@ -1,7 +1,8 @@
 # Tracing
 
 A run in production should leave a trace: which nodes ran and how long each took, which nodes the
-edges chose, which tries failed, and where the run stopped. A `GraphObserver` is told all of that,
+edges chose, which models and tools were called and what they cost, which tries failed, and where
+the run stopped. A `GraphObserver` is told all of that,
 and `telar-otel` sends it to OpenTelemetry, on every platform, so it shows up in the tools a team
 already uses, such as Jaeger, Grafana Tempo or Honeycomb.
 
@@ -127,6 +128,7 @@ A run looks the same with both observers:
 ```
 telar.run                    telar.thread_id=ticket-42  telar.outcome=completed
 ├─ telar.node classify       telar.step=1
+├─ telar.edge classify       telar.step=1  telar.next_nodes=[research]
 ├─ telar.node research       telar.step=2
 │  └─ telar.run              (the subgraph that "research" runs)
 │     ├─ telar.node search   telar.step=1
@@ -142,12 +144,17 @@ telar.run                    telar.thread_id=ticket-42  telar.outcome=completed
 - **A node** is a span named `telar.node <name>` inside its run, with `telar.node`, `telar.step`
   and `telar.outcome`. Each try that failed and was followed by another is an event `telar.retry`,
   with the attempt, the pause and the exception.
+- **An edge with a condition** is a span named `telar.edge <from>` inside its run, with
+  `telar.edge.from`, `telar.step` and `telar.outcome`, and `telar.next_nodes`: what the condition
+  chose. Its step is the one whose results it routes, 0 for an edge from `START`. A plain `edge`
+  calls nothing and has no span; the event `telar.step` names where it went.
 - **A subgraph** is a `telar.run` inside the span of the node that runs it.
-- **A failure** is recorded on the node and on the run, with the status `ERROR`. A cancelled node,
+- **A failure** is recorded on the node or the edge and on the run, with the status `ERROR`. A cancelled node,
   for example the other node of a step in which one node failed, is not an error.
 
 Both observers are also an [`AgentObserver`](#calls-to-models-and-tools), so the calls to models
-and tools inside a node are spans of the node. They have the names and attributes of the
+and tools inside a node are spans of the node, and the call that the condition of a `decisionEdge`
+makes is a span of its edge. They have the names and attributes of the
 [semantic conventions for generative AI](https://opentelemetry.io/docs/specs/semconv/gen-ai/), so a
 backend that knows them shows them as calls to a model. A tool agent looks like this:
 
@@ -223,12 +230,15 @@ An observer is told:
 | `onNodeRetry` | A try failed, and the node runs again after a pause |
 | `onNodeProgress` | A node called `reportProgress`. Only in a run that is streamed |
 | `onNodeCompleted`, `onNodeInterrupted`, `onNodeFailed` | The node ended. Exactly one of them |
+| `onEdgeStarted` | The condition of an edge starts: `conditionalEdge`, `conditionalFanOut`, `decisionEdge`. A plain `edge` is not told |
+| `onEdgeCompleted`, `onEdgeFailed` | The condition chose its targets, or failed. Exactly one of them |
 | `onStepCompleted` | A step ended, with the nodes the edges chose next |
 | `onCheckpointSaved` | The checkpointer saved a checkpoint |
-| `nodeContext` | Returns what to add to the coroutine context of a node, such as a trace span |
+| `nodeContext`, `edgeContext` | Returns what to add to the coroutine context of a node or of the condition of an edge, such as a trace span |
 
-A run is the same `ObservedRun` from its start to its end, and a node the same `ObservedNode`, so
-an observer can keep what it needs in a map with them as keys. The `parent` of the run of a subgraph
+A run is the same `ObservedRun` from its start to its end, a node the same `ObservedNode`, and an
+edge the same `ObservedEdge`, so an observer can keep what it needs in a map with them as keys. The
+conditions of a step run one after the other, after every node of the step ended. The `parent` of the run of a subgraph
 is the node that runs it.
 
 What to keep in mind:
@@ -242,7 +252,7 @@ What to keep in mind:
 ## Calls to models and tools
 
 An `AgentObserver`, from `telar-agent`, is a `GraphObserver` that is also told about every call to
-a model and every tool call inside the nodes of a run. That is enough to count what a run costs, to
+a model and every tool call inside the nodes of a run and in the conditions of its edges. That is enough to count what a run costs, to
 log which tools the model used, or to show the calls in a debugger:
 
 ```kotlin
@@ -251,11 +261,11 @@ val cost =
         private val tokens = ConcurrentHashMap<String, Int>()
 
         override fun onModelCallCompleted(call: ObservedModelCall, usage: TokenUsage?) {
-            tokens.merge(call.node.run.threadId, usage?.total ?: 0, Int::plus)
+            tokens.merge(call.caller.run.threadId, usage?.total ?: 0, Int::plus)
         }
 
         override fun onToolCallCompleted(call: ObservedToolCall, isError: Boolean) {
-            if (isError) log.warn("${call.name} returned an error in ${call.node}")
+            if (isError) log.warn("${call.name} returned an error in ${call.caller}")
         }
     }
 
@@ -270,16 +280,25 @@ agent.invoke(AgentState("Where is my pizza?"), GraphConfig(observers = listOf(co
 | `onToolCallCompleted`, `onToolCallFailed` | The tool returned a result, or an error for the model (`isError`); or the call ended without one: cancelled, or paused by `interrupt`. Exactly one of them |
 
 The calls of `toolLoop` and `toolAgent` are reported, and those of `chatWithProgress`, `ask`, a
-`ChatDecisionModel` and `List<Tool>.execute` in a node of your own. `ask` reports each time it asks,
-so an answer that could not be read and was asked again is two calls. A call straight to
-`ChatModel.chat`, or outside a node, is not. That includes the call of a `decisionEdge`, because an
-edge's condition runs after its node has ended. To see that call, decide in a node with `choose`,
-`isYes` or `score`, store the decision in the state, and route on it with a plain `conditionalEdge`.
+`ChatDecisionModel` and `List<Tool>.execute` in a node or a condition of your own. `ask` reports
+each time it asks, so an answer that could not be read and was asked again is two calls. A call
+straight to `ChatModel.chat`, or outside a run, is not.
+
+Each call has its `caller`: the `ObservedNode` that made it, or the `ObservedEdge` whose condition
+made it, as with a `decisionEdge`:
+
+```kotlin
+when (val caller = call.caller) {
+    is ObservedNode -> println("${caller.name} asked a model")
+    is ObservedEdge -> println("the edge from ${caller.from} asked a model")
+}
+```
+
 As for the rest of an observer, the conversation is never given: not the messages, the input of a
 tool or its result.
 
 The observers of `telar-otel` are agent observers: they record each call as a span inside its node
-(see [The spans](#the-spans)).
+or edge (see [The spans](#the-spans)).
 
-A library can tell observers of its own kind about what happens in a node the same way, with
-`forEachNodeObserver` from `telar-core`.
+A library can tell observers of its own kind about what happens in a node or a condition the same
+way, with `forEachObserver` from `telar-core`.
