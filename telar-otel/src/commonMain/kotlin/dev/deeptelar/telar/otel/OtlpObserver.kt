@@ -1,12 +1,15 @@
 package dev.deeptelar.telar.otel
 
 import dev.deeptelar.telar.GraphConfig
-import dev.deeptelar.telar.GraphObserver
 import dev.deeptelar.telar.GraphValidationException
 import dev.deeptelar.telar.NodeExecutionException
 import dev.deeptelar.telar.ObservedNode
 import dev.deeptelar.telar.ObservedRun
 import dev.deeptelar.telar.TelarException
+import dev.deeptelar.telar.agent.AgentObserver
+import dev.deeptelar.telar.agent.ObservedModelCall
+import dev.deeptelar.telar.agent.ObservedToolCall
+import dev.deeptelar.telar.agent.TokenUsage
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -57,8 +60,38 @@ import kotlin.time.TimeSource
  * - **A failure** is recorded on the span of the node and of the run, as an event `exception` and
  *   the status `ERROR`. A cancelled node or run is not an error.
  *
+ * **Calls to models and tools.** It is also an `AgentObserver`, so the calls that a node of
+ * `toolLoop` or `toolAgent`, `ask`, `chatWithProgress` or a `ChatDecisionModel` makes are spans inside
+ * the span of the node, named as the
+ * [semantic conventions for generative AI](https://opentelemetry.io/docs/specs/semconv/gen-ai/) name
+ * them, so that a backend that knows them shows them as calls to a model:
+ *
+ * ```
+ * telar.run                        telar.thread_id=ticket-42
+ * ├─ telar.node model              telar.step=1
+ * │  └─ chat                       gen_ai.usage.input_tokens=812  gen_ai.usage.output_tokens=64
+ * ├─ telar.node tools              telar.step=2
+ * │  └─ execute_tool order_status  gen_ai.tool.call.id=toolu_01...
+ * └─ telar.node model              telar.step=3
+ *    └─ chat                       gen_ai.usage.input_tokens=901  gen_ai.usage.output_tokens=38
+ * ```
+ *
+ * - **A call to a model** is a span `chat` of kind `CLIENT`, with `gen_ai.operation.name` and the
+ *   tokens its provider reported: `gen_ai.usage.input_tokens` (the tokens read from a cache
+ *   included) and `gen_ai.usage.output_tokens`, and `gen_ai.usage.cache_read.input_tokens` and
+ *   `gen_ai.usage.cache_write.input_tokens` when they are not 0. The name of the model is not known,
+ *   so the span has no `gen_ai.request.model`. A call that failed has the status `ERROR`, an
+ *   `error.type` and an event `exception`.
+ * - **A tool call** is a span `execute_tool <name>`, with `gen_ai.tool.name` and
+ *   `gen_ai.tool.call.id`. A tool that returned an error to the model has the status `ERROR` and
+ *   `error.type` `tool_error`, although the run goes on. A call that ended without a result, because
+ *   the run was cancelled or paused, has no status: the span of the node says what happened.
+ *
+ * Observer functions are not `suspend`, so the span of a call cannot be current while it runs: the
+ * HTTP request of a model is inside the span of the node, next to the span `chat`.
+ *
  * The state of the run is never recorded, nor what a node reports with `reportProgress`: both can
- * hold personal data.
+ * hold personal data. Nor are the messages, the input of a tool or its result.
  *
  * **Sending.** A span is sent when it ends, together with the others that end within [exportDelay],
  * as OTLP/HTTP with JSON, in a coroutine of [scope]. The app creates the [client], with the engine of
@@ -102,13 +135,13 @@ public class OtlpObserver(
     headers: Map<String, String> = emptyMap(),
     private val exportDelay: Duration = 1.seconds,
     private val onExportFailed: (OtlpExportException) -> Unit = {},
-) : GraphObserver {
+) : AgentObserver {
     private val resourceAttributes: List<Attribute> =
         (mapOf("service.name" to serviceName) + resource).map { (key, value) -> Attribute(key, AttributeValue.Text(value)) }
 
     private val requestHeaders: Map<String, String> = headers.toMap()
 
-    /** The spans that started and have not ended, by the run or node they belong to. */
+    /** The spans that started and have not ended, by the run, node or call they belong to. */
     private val open = AtomicReference<Map<Any, SpanRecord>>(emptyMap())
 
     /** The spans that ended and wait to be sent. */
@@ -232,7 +265,47 @@ public class OtlpObserver(
 
     override fun nodeContext(node: ObservedNode): CoroutineContext = open.load()[node]?.context ?: EmptyCoroutineContext
 
-    private fun start(key: Any, name: String, parent: TraceContext?, attributes: List<Attribute>) {
+    override fun onModelCallStarted(call: ObservedModelCall) {
+        val parent = open.load()[call.node] ?: return
+        start(
+            call,
+            name = CHAT,
+            parent = parent.context,
+            attributes = listOf(Attribute(GEN_AI_OPERATION, AttributeValue.Text(CHAT))),
+            kind = SpanKind.CLIENT,
+        )
+    }
+
+    override fun onModelCallCompleted(call: ObservedModelCall, usage: TokenUsage?) {
+        end(call) { span -> usage?.let { span.withUsage(it) } ?: span }
+    }
+
+    override fun onModelCallFailed(call: ObservedModelCall, cause: Throwable) {
+        end(call) { if (cause is CancellationException) it else it.callFailed(cause) }
+    }
+
+    override fun onToolCallStarted(call: ObservedToolCall) {
+        val parent = open.load()[call.node] ?: return
+        val attributes =
+            listOfNotNull(
+                Attribute(GEN_AI_OPERATION, AttributeValue.Text(EXECUTE_TOOL)),
+                Attribute(GEN_AI_TOOL_NAME, AttributeValue.Text(call.name)),
+                Attribute(GEN_AI_TOOL_TYPE, AttributeValue.Text("function")),
+                call.id.takeIf { it.isNotEmpty() }?.let { Attribute(GEN_AI_TOOL_CALL_ID, AttributeValue.Text(it)) },
+            )
+        start(call, name = "$EXECUTE_TOOL ${call.name}", parent = parent.context, attributes = attributes)
+    }
+
+    override fun onToolCallCompleted(call: ObservedToolCall, isError: Boolean) {
+        end(call) { if (isError) it.with(ERROR_TYPE, TOOL_ERROR).copy(error = "The tool returned an error to the model.") else it }
+    }
+
+    override fun onToolCallFailed(call: ObservedToolCall, cause: Throwable) {
+        // Cancelled, paused with `interrupt`, or an error that ends the run: the span of the node says which.
+        end(call) { it }
+    }
+
+    private fun start(key: Any, name: String, parent: TraceContext?, attributes: List<Attribute>, kind: SpanKind = SpanKind.INTERNAL) {
         val span =
             SpanRecord(
                 traceId = parent?.traceId ?: randomId(TRACE_ID_BYTES),
@@ -242,6 +315,7 @@ public class OtlpObserver(
                 startNanos = Clock.System.now().let { it.epochSeconds * NANOS_PER_SECOND + it.nanosecondsOfSecond },
                 started = TimeSource.Monotonic.markNow(),
                 attributes = attributes,
+                kind = kind,
             )
         while (true) {
             val current = open.load()
@@ -319,6 +393,7 @@ internal data class SpanRecord(
     val events: List<SpanEvent> = emptyList(),
     val error: String? = null,
     val endNanos: Long? = null,
+    val kind: SpanKind = SpanKind.INTERNAL,
 ) {
     /** The ids of this span, as the parent of another. */
     val context: TraceContext get() = TraceContext(traceId, spanId)
@@ -340,14 +415,38 @@ internal data class SpanRecord(
         if (cause is CancellationException) {
             with(OUTCOME, "cancelled")
         } else {
-            with(OUTCOME, "failed")
-                .withEvent(
-                    "exception",
-                    Attribute(EXCEPTION_TYPE, AttributeValue.Text(cause.typeName())),
-                    Attribute(EXCEPTION_MESSAGE, AttributeValue.Text(cause.message.orEmpty())),
-                    Attribute(EXCEPTION_STACKTRACE, AttributeValue.Text(cause.stackTraceToString())),
-                ).copy(error = cause.message.orEmpty())
+            with(OUTCOME, "failed").withException(cause)
         }
+
+    /** A call that failed, as the semantic conventions for generative AI record it. */
+    fun callFailed(cause: Throwable): SpanRecord = with(ERROR_TYPE, cause.typeName()).withException(cause)
+
+    fun withUsage(usage: TokenUsage): SpanRecord =
+        listOfNotNull(
+            GEN_AI_INPUT_TOKENS to usage.inputTokens,
+            GEN_AI_OUTPUT_TOKENS to usage.outputTokens,
+            (GEN_AI_CACHE_READ_TOKENS to usage.cacheReadTokens).takeIf { it.second > 0 },
+            (GEN_AI_CACHE_WRITE_TOKENS to usage.cacheWriteTokens).takeIf { it.second > 0 },
+        ).fold(this) { span, (key, tokens) -> span.with(Attribute(key, AttributeValue.Number(tokens.toLong()))) }
+
+    private fun withException(cause: Throwable): SpanRecord =
+        withEvent(
+            "exception",
+            Attribute(EXCEPTION_TYPE, AttributeValue.Text(cause.typeName())),
+            Attribute(EXCEPTION_MESSAGE, AttributeValue.Text(cause.message.orEmpty())),
+            Attribute(EXCEPTION_STACKTRACE, AttributeValue.Text(cause.stackTraceToString())),
+        ).copy(error = cause.message.orEmpty())
+}
+
+/** What a span is to its trace, with its number in OTLP. */
+internal enum class SpanKind(
+    val code: Int,
+) {
+    /** Work inside the app: a run, a node or a tool call. */
+    INTERNAL(1),
+
+    /** A request to another service: a call to a model. */
+    CLIENT(3),
 }
 
 internal data class SpanEvent(
@@ -408,3 +507,15 @@ private const val PAUSE_MS = "telar.pause_ms"
 private const val EXCEPTION_TYPE = "exception.type"
 private const val EXCEPTION_MESSAGE = "exception.message"
 private const val EXCEPTION_STACKTRACE = "exception.stacktrace"
+private const val ERROR_TYPE = "error.type"
+private const val TOOL_ERROR = "tool_error"
+private const val CHAT = "chat"
+private const val EXECUTE_TOOL = "execute_tool"
+private const val GEN_AI_OPERATION = "gen_ai.operation.name"
+private const val GEN_AI_INPUT_TOKENS = "gen_ai.usage.input_tokens"
+private const val GEN_AI_OUTPUT_TOKENS = "gen_ai.usage.output_tokens"
+private const val GEN_AI_CACHE_READ_TOKENS = "gen_ai.usage.cache_read.input_tokens"
+private const val GEN_AI_CACHE_WRITE_TOKENS = "gen_ai.usage.cache_write.input_tokens"
+private const val GEN_AI_TOOL_NAME = "gen_ai.tool.name"
+private const val GEN_AI_TOOL_TYPE = "gen_ai.tool.type"
+private const val GEN_AI_TOOL_CALL_ID = "gen_ai.tool.call.id"

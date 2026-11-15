@@ -11,6 +11,8 @@ kotlin {
         // that tracing works on every platform, the browser included.
         commonMain.dependencies {
             api(project(":telar-core"))
+            // AgentObserver: a span for each call to a model and each tool call inside a node.
+            api(project(":telar-agent"))
             api(libs.ktor.client.core)
             implementation(libs.kotlinx.serialization.json)
         }
@@ -18,6 +20,7 @@ kotlin {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.ktor.client.mock)
+            implementation(project(":telar-test"))
         }
         // OpenTelemetryObserver: the OpenTelemetry API of Java, for apps that already have its SDK or agent.
         jvmMain.dependencies {

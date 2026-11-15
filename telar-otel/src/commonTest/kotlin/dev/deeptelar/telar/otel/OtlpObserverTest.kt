@@ -8,7 +8,12 @@ import dev.deeptelar.telar.NodeExecutionException
 import dev.deeptelar.telar.Retry
 import dev.deeptelar.telar.START
 import dev.deeptelar.telar.StateGraph
+import dev.deeptelar.telar.agent.AgentState
+import dev.deeptelar.telar.agent.TokenUsage
+import dev.deeptelar.telar.agent.Tool
+import dev.deeptelar.telar.agent.toolAgent
 import dev.deeptelar.telar.interrupt
+import dev.deeptelar.telar.test.ScriptedChatModel
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -122,6 +127,106 @@ class OtlpObserverTest {
     }
 
     private fun List<Sent>.span(name: String): Sent = single { it.name == name }
+
+    private val orderStatus = Tool<Unit>("order_status", "Returns where the order is.") { "The driver is 5 minutes away." }
+
+    @Test
+    fun `each call to a model and each tool call is a span inside its node`() =
+        runTest {
+            val tracing = tracing()
+            val model =
+                ScriptedChatModel {
+                    calls(call("order_status"), usage = TokenUsage(inputTokens = 812, outputTokens = 64, cacheReadTokens = 700))
+                    says("5 minutes.", usage = TokenUsage(inputTokens = 901, outputTokens = 38, cacheWriteTokens = 120))
+                }
+
+            toolAgent(model, listOf(orderStatus)).invoke(AgentState("Where is my pizza?"), GraphConfig(observers = listOf(tracing)))
+            val spans = tracing.sent()
+
+            val nodes = spans.filter { it.name.startsWith("telar.node") }.associateBy { it.long("telar.step") }
+            val chats = spans.filter { it.name == "chat" }
+            assertEquals(listOf(nodes[1]!!.spanId, nodes[3]!!.spanId), chats.map { it.parentSpanId })
+            assertEquals(listOf("chat", "chat"), chats.map { it.string("gen_ai.operation.name") })
+            assertEquals(listOf(3, 3), chats.map { it.json.text("kind")!!.toInt() })
+            assertEquals(listOf(812L, 901L), chats.map { it.long("gen_ai.usage.input_tokens") })
+            assertEquals(listOf(64L, 38L), chats.map { it.long("gen_ai.usage.output_tokens") })
+            assertEquals(listOf(700L, null), chats.map { it.long("gen_ai.usage.cache_read.input_tokens") })
+            assertEquals(listOf(null, 120L), chats.map { it.long("gen_ai.usage.cache_write.input_tokens") })
+            assertEquals(listOf(null, null), chats.map { it.statusCode })
+
+            val tool = spans.span("execute_tool order_status")
+            assertEquals(nodes[2]!!.spanId, tool.parentSpanId)
+            assertEquals("execute_tool", tool.string("gen_ai.operation.name"))
+            assertEquals("order_status", tool.string("gen_ai.tool.name"))
+            assertEquals("call-1", tool.string("gen_ai.tool.call.id"))
+            assertEquals("function", tool.string("gen_ai.tool.type"))
+            assertEquals(1, tool.json.text("kind")!!.toInt())
+            assertNull(tool.statusCode)
+            assertEquals(setOf(spans.span("telar.run").traceId), spans.map { it.traceId }.toSet())
+        }
+
+    @Test
+    fun `a call to a model that fails is an error`() =
+        runTest {
+            val tracing = tracing()
+            val model = ScriptedChatModel { fails("API error 529: Overloaded") }
+
+            assertFailsWith<NodeExecutionException> {
+                toolAgent(model).invoke(AgentState("Where is my pizza?"), GraphConfig(observers = listOf(tracing)))
+            }
+            val chat = tracing.sent().span("chat")
+
+            assertEquals(2, chat.statusCode)
+            assertEquals("API error 529: Overloaded", chat.statusMessage)
+            assertTrue(chat.string("error.type")!!.endsWith("ChatModelException"))
+            assertEquals("API error 529: Overloaded", chat.event("exception")["exception.message"]!!.text("stringValue"))
+            assertNull(chat.long("gen_ai.usage.input_tokens"))
+        }
+
+    @Test
+    fun `a tool that returns an error is an error of its span and the run goes on`() =
+        runTest {
+            val tracing = tracing()
+            val broken = Tool<Unit>("broken", "Always fails.") { error("The service is down.") }
+            val model =
+                ScriptedChatModel {
+                    calls(call("broken"))
+                    says("The service is down, sorry.")
+                }
+
+            toolAgent(model, listOf(broken)).invoke(AgentState("Where is my pizza?"), GraphConfig(observers = listOf(tracing)))
+            val spans = tracing.sent()
+
+            val tool = spans.span("execute_tool broken")
+            assertEquals(2, tool.statusCode)
+            assertEquals("tool_error", tool.string("error.type"))
+            assertEquals("completed", spans.span("telar.run").string("telar.outcome"))
+        }
+
+    @Test
+    fun `a cancelled run ends the spans of its calls without an error`() =
+        runTest {
+            val tracing = tracing()
+            val waits = Tool<Unit>("wait", "Never returns.") { awaitCancellation() }
+            val model = ScriptedChatModel { calls(call("wait")) }
+
+            val job =
+                launch {
+                    toolAgent(
+                        model,
+                        listOf(waits),
+                    ).invoke(AgentState("Where is my pizza?"), GraphConfig(observers = listOf(tracing)))
+                }
+            testScheduler.runCurrent()
+            job.cancel()
+            job.join()
+            val spans = tracing.sent()
+
+            val tool = spans.span("execute_tool wait")
+            assertNull(tool.statusCode)
+            assertEquals(listOf(null), spans.filter { it.name == "chat" }.map { it.statusCode })
+            assertEquals("cancelled", spans.span("telar.run").string("telar.outcome"))
+        }
 
     @Test
     fun `a run is a span with a span for each node inside it`() =

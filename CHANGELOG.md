@@ -7,6 +7,15 @@ breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- `OtlpObserver` and `OpenTelemetryObserver` of `telar-otel` record a span for each call to a model
+  and each tool call inside the span of its node, with the names of the OpenTelemetry semantic
+  conventions for generative AI: `chat`, with the tokens of the call in `gen_ai.usage.*`, and
+  `execute_tool <name>`, with `gen_ai.tool.name` and `gen_ai.tool.call.id`. Both observers are now an
+  `AgentObserver`, and `telar-otel` depends on `telar-agent`.
+  ([#138](https://github.com/deeptelar/telar/issues/138))
+
 ## [0.1.0-alpha18] - 2026-11-06
 
 ### Added

@@ -34,7 +34,7 @@ private fun SpanRecord.json(): JsonObject =
         put("spanId", spanId)
         parentSpanId?.let { put("parentSpanId", it) }
         put("name", name)
-        put("kind", SPAN_KIND_INTERNAL)
+        put("kind", kind.code)
         put("startTimeUnixNano", startNanos.toString())
         put("endTimeUnixNano", (endNanos ?: startNanos).toString())
         put("attributes", attributes.json())
@@ -77,5 +77,4 @@ private fun AttributeValue.json(): JsonObject =
             }
     }
 
-private const val SPAN_KIND_INTERNAL = 1
 private const val STATUS_CODE_ERROR = 2
