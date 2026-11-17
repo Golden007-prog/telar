@@ -275,17 +275,13 @@ val config = GraphConfig(
 
 ## In PostgreSQL, for servers
 
-::: info Not on Maven Central yet
-`telar-checkpoint-postgres` comes with the next release.
-:::
-
 A server with several instances needs a database they share, so that a run that paused on one
 instance can be resumed on another. `PostgresCheckpointer`, from `telar-checkpoint-postgres` (JVM),
 keeps the checkpoints in PostgreSQL, through the `DataSource` of the app:
 
 ```kotlin
 // build.gradle.kts
-implementation("dev.deeptelar:telar-checkpoint-postgres:<version>")
+implementation("dev.deeptelar:telar-checkpoint-postgres:0.1.0-alpha19")
 implementation("org.postgresql:postgresql:42.7.14") // the JDBC driver
 implementation("com.zaxxer:HikariCP:7.1.0")         // or any other pool
 

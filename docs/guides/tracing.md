@@ -10,7 +10,7 @@ already uses, such as Jaeger, Grafana Tempo or Honeycomb.
 
 ```kotlin
 dependencies {
-    implementation("dev.deeptelar:telar-otel:0.1.0-alpha17")
+    implementation("dev.deeptelar:telar-otel:0.1.0-alpha19")
 }
 ```
 
