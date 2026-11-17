@@ -7,6 +7,12 @@ breaking changes.
 
 ## [Unreleased]
 
+## [0.1.0-alpha19] - 2026-11-17
+
+It also brings everything of
+[`0.1.0-alpha18`](https://github.com/deeptelar/telar/blob/main/CHANGELOG.md#010-alpha18---2026-11-06),
+the memory across conversations, which never reached Maven Central.
+
 ### Added
 
 - `telar-bom`, a bill of materials: `implementation(platform("dev.deeptelar:telar-bom:<version>"))`
@@ -44,6 +50,9 @@ breaking changes.
   the condition of an edge and gives an `ObservedCaller`. ([#157](https://github.com/deeptelar/telar/issues/157))
 
 ## [0.1.0-alpha18] - 2026-11-06
+
+Tagged, but never published to Maven Central: it went over the monthly limits of Maven Central.
+Everything below is in `0.1.0-alpha19`.
 
 ### Added
 
@@ -715,7 +724,8 @@ First public release. Everything below is new compared with the unpublished beta
 - `START` counted toward `maxIterations`.
 - `FileCheckpointer` did not write the format version into its files.
 
-[Unreleased]: https://github.com/deeptelar/telar/compare/v0.1.0-alpha18...HEAD
+[Unreleased]: https://github.com/deeptelar/telar/compare/v0.1.0-alpha19...HEAD
+[0.1.0-alpha19]: https://github.com/deeptelar/telar/compare/v0.1.0-alpha18...v0.1.0-alpha19
 [0.1.0-alpha18]: https://github.com/deeptelar/telar/compare/v0.1.0-alpha17...v0.1.0-alpha18
 [0.1.0-alpha17]: https://github.com/deeptelar/telar/compare/v0.1.0-alpha16...v0.1.0-alpha17
 [0.1.0-alpha16]: https://github.com/deeptelar/telar/compare/v0.1.0-alpha15...v0.1.0-alpha16

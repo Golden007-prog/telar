@@ -3,22 +3,22 @@
 ```kotlin
 dependencies {
     // The graph builder and the engine. This is all the quick start needs.
-    implementation("dev.deeptelar:telar-core:0.1.0-alpha17")
+    implementation("dev.deeptelar:telar-core:0.1.0-alpha19")
 
     // Optional modules. Add only the ones you use.
-    implementation("dev.deeptelar:telar-serialization:0.1.0-alpha17")      // save @Serializable states
-    implementation("dev.deeptelar:telar-checkpoint-file:0.1.0-alpha17")    // save runs as JSON files
-    implementation("dev.deeptelar:telar-checkpoint-browser:0.1.0-alpha17") // save runs in a browser's localStorage (JS and Wasm)
-    implementation("dev.deeptelar:telar-checkpoint-sqldelight:0.1.0-alpha17") // save runs in SQLite through SQLDelight, on every platform
-    // telar-checkpoint-postgres: save runs in PostgreSQL, for servers (JVM). It comes with the next release.
-    implementation("dev.deeptelar:telar-agent:0.1.0-alpha17")              // chat models, tools and the tool-calling agent
-    implementation("dev.deeptelar:telar-anthropic:0.1.0-alpha17")          // call Claude, on every platform
-    implementation("dev.deeptelar:telar-openai:0.1.0-alpha17")             // call OpenAI, Ollama and compatible servers, on every platform
-    implementation("dev.deeptelar:telar-langchain4j:0.1.0-alpha17")        // call AI models through LangChain4j (JVM)
-    implementation("dev.deeptelar:telar-typesafe:0.1.0-alpha17")           // ask Jev, a decision model, on every platform
-    implementation("dev.deeptelar:telar-mcp:0.1.0-alpha17")                // the tools of an MCP server as tools of an agent
-    implementation("dev.deeptelar:telar-otel:0.1.0-alpha17")               // send runs to OpenTelemetry, on every platform
-    testImplementation("dev.deeptelar:telar-test:0.1.0-alpha17")           // scripted models and checks for the tests of a graph
+    implementation("dev.deeptelar:telar-serialization:0.1.0-alpha19")      // save @Serializable states
+    implementation("dev.deeptelar:telar-checkpoint-file:0.1.0-alpha19")    // save runs as JSON files
+    implementation("dev.deeptelar:telar-checkpoint-browser:0.1.0-alpha19") // save runs in a browser's localStorage (JS and Wasm)
+    implementation("dev.deeptelar:telar-checkpoint-sqldelight:0.1.0-alpha19") // save runs in SQLite through SQLDelight, on every platform
+    implementation("dev.deeptelar:telar-checkpoint-postgres:0.1.0-alpha19") // save runs in PostgreSQL, for servers (JVM)
+    implementation("dev.deeptelar:telar-agent:0.1.0-alpha19")              // chat models, tools and the tool-calling agent
+    implementation("dev.deeptelar:telar-anthropic:0.1.0-alpha19")          // call Claude, on every platform
+    implementation("dev.deeptelar:telar-openai:0.1.0-alpha19")             // call OpenAI, Ollama and compatible servers, on every platform
+    implementation("dev.deeptelar:telar-langchain4j:0.1.0-alpha19")        // call AI models through LangChain4j (JVM)
+    implementation("dev.deeptelar:telar-typesafe:0.1.0-alpha19")           // ask Jev, a decision model, on every platform
+    implementation("dev.deeptelar:telar-mcp:0.1.0-alpha19")                // the tools of an MCP server as tools of an agent
+    implementation("dev.deeptelar:telar-otel:0.1.0-alpha19")               // send runs to OpenTelemetry, on every platform
+    testImplementation("dev.deeptelar:telar-test:0.1.0-alpha19")           // scripted models and checks for the tests of a graph
 }
 ```
 
@@ -27,13 +27,9 @@ dependencies {
 `telar-bom` names the version of every module of Telar, so an app writes it once and cannot mix
 versions:
 
-::: info Not on Maven Central yet
-`telar-bom` comes with the next release. Until then, name the version in each module as above.
-:::
-
 ```kotlin
 dependencies {
-    implementation(platform("dev.deeptelar:telar-bom:<version>"))
+    implementation(platform("dev.deeptelar:telar-bom:0.1.0-alpha19"))
     implementation("dev.deeptelar:telar-core")
     implementation("dev.deeptelar:telar-agent")
     implementation("dev.deeptelar:telar-anthropic")
@@ -54,7 +50,7 @@ it in `<dependencyManagement>` with `<scope>import</scope>` and leave the versio
 | `telar-checkpoint-file` | same as core (Node.js only for JS/Wasm) | `FileCheckpointer`, one JSON file per thread, and `FileStore` |
 | `telar-checkpoint-browser` | JS and Wasm in a browser | `LocalStorageCheckpointer`, runs that survive a page reload, and `LocalStorageStore` |
 | `telar-checkpoint-sqldelight` | same as core | `SqlDelightCheckpointer`: runs in a SQLite database through SQLDelight, on Android, iOS, desktop, servers and the browser (in memory there), and `SqlDelightStore` |
-| `telar-checkpoint-postgres` | JVM | `PostgresCheckpointer` and `PostgresStore`: runs and memories in [PostgreSQL](guides/human-in-the-loop.md#in-postgresql-for-servers), shared by the instances of a server, through the app's JDBC `DataSource`. From the next release |
+| `telar-checkpoint-postgres` | JVM | `PostgresCheckpointer` and `PostgresStore`: runs and memories in [PostgreSQL](guides/human-in-the-loop.md#in-postgresql-for-servers), shared by the instances of a server, through the app's JDBC `DataSource` |
 | `telar-agent` | same as core | `ChatModel`, `Tool`, and the tool-calling agent: `toolAgent` / `toolLoop`; `memoryTools`, `EmbeddingModel` and `SemanticStore` |
 | `telar-anthropic` | same as core | `AnthropicChatModel`, Claude through Ktor |
 | `telar-openai` | same as core | `OpenAiChatModel`: OpenAI, Ollama and other servers with the Chat Completions API, through Ktor; `OpenAiEmbeddingModel` for their embeddings |
@@ -70,6 +66,6 @@ Java 17 because LangChain4j does.
 
 ## Status
 
-Alpha. `0.1.0-alpha17` is the latest release, and it is on Maven Central. The API may still change
+Alpha. `0.1.0-alpha19` is the latest release, and it is on Maven Central. The API may still change
 before `1.0`; the [changelog](https://github.com/deeptelar/telar/blob/main/CHANGELOG.md) lists what changes in each version, and the
 [roadmap](https://github.com/deeptelar/telar/blob/main/ROADMAP.md) lists what is planned.

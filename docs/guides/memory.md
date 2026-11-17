@@ -1,10 +1,5 @@
 # Memory across conversations
 
-::: info Not on Maven Central yet
-Stores come in `0.1.0-alpha18`, which waits for Maven Central to accept it. Until then they are
-only in `main`.
-:::
-
 A checkpoint holds one thread, and a conversation is a thread. What an agent learns about a user
 in one conversation, such as how they eat, is gone in the next one unless it is kept somewhere
 else. A `Store` is that place. It belongs to no thread, so every run that gets the same store
@@ -171,7 +166,7 @@ Each module with a checkpointer has a store too, for the same platforms:
 | `FileStore(directory)` | `telar-checkpoint-file` | A folder for each part of a namespace, and in it one JSON file with the items of that namespace. Every platform with a file system; JS and Wasm on Node.js only |
 | `SqlDelightStore(driver)` | `telar-checkpoint-sqldelight` | A table `telar_store` with a row for each item, in any SQLite database of SQLDelight: Android, iOS, desktop, servers, and the browser, where the database of SQLDelight's worker is in memory |
 | `LocalStorageStore()` | `telar-checkpoint-browser` | An entry of the page's `localStorage` for each item, so the items survive a reload |
-| `PostgresStore(dataSource)` | `telar-checkpoint-postgres` | A table `telar_store` with a row for each item, in PostgreSQL, so that every instance of a server remembers the same. JVM. It comes with the next release |
+| `PostgresStore(dataSource)` | `telar-checkpoint-postgres` | A table `telar_store` with a row for each item, in PostgreSQL, so that every instance of a server remembers the same. JVM |
 
 `SqlDelightStore` creates its table when it first needs it, so one database, and one driver, can
 hold the checkpoints and the memories:
