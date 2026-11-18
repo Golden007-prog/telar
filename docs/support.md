@@ -8,14 +8,14 @@ version, especially if your app depends on an API that was recently added.
 
 Telar is built with Kotlin 2.4. The
 [version catalog](https://github.com/deeptelar/telar/blob/main/gradle/libs.versions.toml) pins the
-exact compiler version. Use Kotlin 2.4 for a new consumer. For `0.1.0-alpha19`, a Java 17
-consumer compiled and ran a small graph against `telar-core` with Kotlin 2.3.21. Kotlin 2.2.21
-rejected that artifact's 2.4 metadata. Older compiler compatibility depends on the selected
-module, its dependencies, and its target. For Kotlin/Native, JS and Wasm, start with the
-Kotlin version used to build the release.
+exact compiler version. On the JVM, Kotlin 2.3 also works. For `0.1.0-alpha19`, a Java 17 app
+compiled and ran a small graph against `telar-core` with Kotlin 2.3.21. Kotlin 2.2.21 rejected
+that artifact's 2.4 metadata. Older compiler compatibility depends on the selected module,
+its dependencies, and its target. For Kotlin/Native, JS and Wasm, use the Kotlin version
+used to build the release.
 
-When the minimum consumer compiler changes, the release notes should identify the new minimum
-and the affected targets. A patch release after 1.0 should retain the preceding patch's minimum.
+When the minimum compiler version for apps changes, the release notes name the new minimum
+and the affected targets. A patch release after 1.0 keeps the minimum of the preceding patch.
 
 | Modules | Published targets and runtime requirements |
 | --- | --- |
@@ -38,8 +38,8 @@ Telar follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). After 
 release contains backward-compatible fixes. A minor release can add backward-compatible API
 and mark an API deprecated. A major release can remove or change stable public API incompatibly.
 
-The proposed deprecation window is at least two subsequent minor releases and at least three
-months. Each deprecation should name a replacement or migration path, using Kotlin's
+The deprecation window is at least two subsequent minor releases and at least three
+months. Each deprecation names a replacement or migration path, using Kotlin's
 `ReplaceWith` where an automatic replacement is suitable. Removal of a stable public
 declaration belongs in a major release.
 
@@ -49,8 +49,8 @@ that relies on an experimental declaration should check the changelog when upgra
 
 ## Release cadence and security fixes
 
-The proposed cadence is at most one routine release per month. A security fix can be released
-sooner. During alpha, security fixes are released for the latest published version. See the
+Telar publishes at most one routine release per month. Security fixes are released sooner
+when needed. During alpha, security fixes are released for the latest published version. See the
 [security policy](https://github.com/deeptelar/telar/blob/main/SECURITY.md) for private reporting.
 
 See the [changelog](https://github.com/deeptelar/telar/blob/main/CHANGELOG.md) for migration notes
